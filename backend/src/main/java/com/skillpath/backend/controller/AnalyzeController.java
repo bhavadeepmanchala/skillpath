@@ -3,6 +3,7 @@ package com.skillpath.backend.controller;
 import com.skillpath.backend.dto.AnalyzeRequest;
 import com.skillpath.backend.dto.AnalyzeResponse;
 import com.skillpath.backend.model.Field;
+import com.skillpath.backend.service.GeminiService;
 import com.skillpath.backend.service.SkillMatchService;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,13 +11,15 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*") // allows frontend to call this during development
+@CrossOrigin(origins = "*")
 public class AnalyzeController {
 
     private final SkillMatchService skillMatchService;
+    private final GeminiService geminiService;
 
-    public AnalyzeController(SkillMatchService skillMatchService) {
+    public AnalyzeController(SkillMatchService skillMatchService, GeminiService geminiService) {
         this.skillMatchService = skillMatchService;
+        this.geminiService = geminiService;
     }
 
     @PostMapping("/analyze")
@@ -27,8 +30,7 @@ public class AnalyzeController {
         List<String> missing = skillMatchService.findMissingSkills(bestField, request.getSkills());
         int matchPercent = skillMatchService.calculateMatchPercent(bestField, request.getSkills());
 
-        // AI advice will be added in the next step — placeholder for now
-        String placeholderAdvice = "AI advice will appear here once connected.";
+        String aiAdvice = geminiService.getAdvice(bestField.getName(), have, missing);
 
         return new AnalyzeResponse(
                 bestField.getName(),
@@ -38,7 +40,7 @@ public class AnalyzeController {
                 have,
                 missing,
                 bestField.getRecommendedCourses(),
-                placeholderAdvice
+                aiAdvice
         );
     }
 
