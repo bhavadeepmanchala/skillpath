@@ -8,6 +8,38 @@ import { CoursesCard } from "@/components/results/courses-card"
 import { AdviceCard } from "@/components/results/advice-card"
 import { dummyAnalysis } from "@/lib/skill-data"
 
+async function fetchAnalysis(skills: string[], interest?: string) {
+  try {
+    const res = await fetch("http://127.0.0.1:8080/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skills, careerInterest: interest ?? null }),
+      cache: "no-store",
+    })
+    if (!res.ok) throw new Error(`Backend returned ${res.status}`)
+    const data = await res.json()
+
+    return {
+      bestField: data.fieldName as string,
+      matchScore: data.matchPercent as number,
+      demand: data.demandLevel as "High" | "Medium" | "Low",
+      trend: (data.trend as string).toLowerCase() as "rising" | "stable" | "declining",
+      yourSkills: data.skillsHave as string[],
+      missingSkills: data.missingSkills as string[],
+      courses: (data.recommendedCourses as string[]).map((title) => ({
+        title,
+        provider: "Free resource",
+        duration: "Self-paced",
+        level: "Beginner" as const,
+      })),
+      advice: data.aiAdvice as string,
+    }
+  } catch (err) {
+    console.error("Backend call failed, falling back to placeholder data:", err)
+    return null
+  }
+}
+
 export default async function ResultsPage({
   searchParams,
 }: {
@@ -15,12 +47,18 @@ export default async function ResultsPage({
 }) {
   const { skills, interest } = await searchParams
 
-  // Placeholder analysis. Overlay the user's inputs onto dummy data for now —
-  // swap this for a real backend API call later.
-  const yourSkills = skills
+  const skillsArray = skills
     ? skills.split(",").map((s) => s.trim()).filter(Boolean)
     : dummyAnalysis.yourSkills
-  const bestField = interest || dummyAnalysis.bestField
+
+  const liveResult = skillsArray.length > 0 ? await fetchAnalysis(skillsArray, interest) : null
+
+  const result =
+    liveResult ?? {
+      ...dummyAnalysis,
+      yourSkills: skillsArray,
+      bestField: interest || dummyAnalysis.bestField,
+    }
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
@@ -46,19 +84,19 @@ export default async function ResultsPage({
           <div className="grid gap-6 lg:grid-cols-5">
             <div className="flex flex-col gap-6 lg:col-span-3">
               <BestMatchCard
-                field={bestField}
-                matchScore={dummyAnalysis.matchScore}
-                demand={dummyAnalysis.demand}
-                trend={dummyAnalysis.trend}
+                field={result.bestField}
+                matchScore={result.matchScore}
+                demand={result.demand}
+                trend={result.trend}
               />
               <SkillGapCard
-                yourSkills={yourSkills}
-                missingSkills={dummyAnalysis.missingSkills}
+                yourSkills={result.yourSkills}
+                missingSkills={result.missingSkills}
               />
             </div>
             <div className="flex flex-col gap-6 lg:col-span-2">
-              <AdviceCard advice={dummyAnalysis.advice} />
-              <CoursesCard courses={dummyAnalysis.courses} />
+              <AdviceCard advice={result.advice} />
+              <CoursesCard courses={result.courses} />
             </div>
           </div>
         </div>
