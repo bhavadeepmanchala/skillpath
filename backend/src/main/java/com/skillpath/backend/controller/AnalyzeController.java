@@ -43,6 +43,10 @@ public class AnalyzeController {
                 aiAdvice
         );
     }
+    @GetMapping("/policymaker")
+    public com.skillpath.backend.dto.PolicymakerResponse getPolicymakerSummary() {
+        return skillMatchService.getPolicymakerSummary();
+    }
 
     @GetMapping("/fields")
     public List<Field> getAllFields() {

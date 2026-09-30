@@ -1,5 +1,7 @@
 package com.skillpath.backend.service;
 
+import java.util.Map;
+import com.skillpath.backend.dto.PolicymakerResponse;
 import tools.jackson.databind.ObjectMapper;
 import com.skillpath.backend.model.Field;
 import com.skillpath.backend.model.FieldData;
@@ -28,6 +30,31 @@ public class SkillMatchService {
 
     public List<Field> getAllFields() {
         return fields;
+    }
+    public PolicymakerResponse getPolicymakerSummary() {
+        List<PolicymakerResponse.FieldSummary> fieldSummaries = fields.stream()
+                .map(f -> new PolicymakerResponse.FieldSummary(
+                        f.getName(), f.getDemandLevel(), f.getTrend(), f.getAvgOpenings()
+                ))
+                .toList();
+
+        Map<String, Integer> distribution = new java.util.HashMap<>();
+        distribution.put("High", 0);
+        distribution.put("Medium", 0);
+        distribution.put("Low", 0);
+        for (Field f : fields) {
+            distribution.merge(f.getDemandLevel(), 1, Integer::sum);
+        }
+
+        // Pick core skills from the top 4 highest-demand, rising fields as "biggest gaps"
+        List<String> biggestGaps = fields.stream()
+                .filter(f -> "High".equalsIgnoreCase(f.getDemandLevel()) && "Rising".equalsIgnoreCase(f.getTrend()))
+                .flatMap(f -> f.getCoreSkills().stream())
+                .distinct()
+                .limit(4)
+                .toList();
+
+        return new PolicymakerResponse(fieldSummaries, distribution, biggestGaps);
     }
 
     // Finds the field with the highest skill overlap for the given user skills
