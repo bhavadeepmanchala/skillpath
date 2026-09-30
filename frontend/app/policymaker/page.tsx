@@ -2,7 +2,7 @@ import { ArrowDownRight, ArrowUpRight, Minus, Users, TrendingUp } from "lucide-r
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Navbar } from "@/components/navbar"
-import { policymakerFields, policymakerGapSkills, type Demand, type Trend } from "@/lib/skill-data"
+import { policymakerFields as dummyFields, policymakerGapSkills as dummyGapSkills, type Demand, type Trend } from "@/lib/skill-data"
 
 const demandStyles: Record<Demand, string> = {
   High: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -16,13 +16,58 @@ const trendStyles: Record<Trend, { label: string; icon: typeof ArrowUpRight; cla
   declining: { label: "Declining", icon: ArrowDownRight, className: "text-red-500" },
 }
 
-const distribution = [
-  { label: "High demand", count: policymakerFields.filter((item) => item.demand === "High").length, color: "bg-emerald-500" },
-  { label: "Medium demand", count: policymakerFields.filter((item) => item.demand === "Medium").length, color: "bg-amber-400" },
-  { label: "Low demand", count: policymakerFields.filter((item) => item.demand === "Low").length, color: "bg-red-400" },
-]
+type FieldRow = {
+  field: string
+  demand: Demand
+  trend: Trend
+  avgOpenings: number
+}
 
-export default function PolicymakerPage() {
+async function fetchPolicymakerData(): Promise<{
+  fields: FieldRow[]
+  distribution: { label: string; count: number; color: string }[]
+  gapSkills: string[]
+} | null> {
+  try {
+    const res = await fetch("http://127.0.0.1:8080/api/policymaker", { cache: "no-store" })
+    if (!res.ok) throw new Error(`Backend returned ${res.status}`)
+    const data = await res.json()
+
+    const fields: FieldRow[] = data.fields.map((f: any) => ({
+      field: f.name,
+      demand: f.demandLevel as Demand,
+      trend: (f.trend as string).toLowerCase() as Trend,
+      avgOpenings: f.avgOpenings,
+    }))
+
+    const distribution = [
+      { label: "High demand", count: data.demandDistribution.High ?? 0, color: "bg-emerald-500" },
+      { label: "Medium demand", count: data.demandDistribution.Medium ?? 0, color: "bg-amber-400" },
+      { label: "Low demand", count: data.demandDistribution.Low ?? 0, color: "bg-red-400" },
+    ]
+
+    return { fields, distribution, gapSkills: data.biggestSkillGaps }
+  } catch (err) {
+    console.error("Policymaker backend call failed, using placeholder data:", err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
+export default async function PolicymakerPage() {
+  const live = await fetchPolicymakerData()
+
+  const fields: FieldRow[] =
+    live?.fields ??
+    dummyFields.map((f) => ({ field: f.field, demand: f.demand, trend: f.trend, avgOpenings: f.studentsMatched }))
+
+  const distribution = live?.distribution ?? [
+    { label: "High demand", count: dummyFields.filter((f) => f.demand === "High").length, color: "bg-emerald-500" },
+    { label: "Medium demand", count: dummyFields.filter((f) => f.demand === "Medium").length, color: "bg-amber-400" },
+    { label: "Low demand", count: dummyFields.filter((f) => f.demand === "Low").length, color: "bg-red-400" },
+  ]
+
+  const gapSkills = live?.gapSkills ?? dummyGapSkills
+
   const maxCount = Math.max(...distribution.map((item) => item.count))
 
   return (
@@ -37,7 +82,7 @@ export default function PolicymakerPage() {
                 Skill Demand Overview — All Fields
               </h1>
               <p className="mt-3 max-w-2xl text-muted-foreground">
-                A read-only snapshot of what students are learning and where hiring demand is heading.
+                A read-only snapshot of hiring demand across fields, based on seeded market data.
               </p>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-4 py-2 text-sm text-muted-foreground shadow-sm">
@@ -50,21 +95,20 @@ export default function PolicymakerPage() {
             <Card className="overflow-hidden">
               <CardHeader className="border-b border-border/60 bg-sky-50/60">
                 <CardTitle>Career fields</CardTitle>
-                <CardDescription>Demand signals from matched student profiles.</CardDescription>
+                <CardDescription>Demand and trend by field.</CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto p-0">
-                <table className="w-full min-w-[720px] text-left text-sm">
+                <table className="w-full min-w-[640px] text-left text-sm">
                   <thead className="border-b border-border/60 bg-muted/35 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-6 py-4 font-medium">Field name</th>
                       <th className="px-4 py-4 font-medium">Demand</th>
                       <th className="px-4 py-4 font-medium">Trend</th>
-                      <th className="px-4 py-4 font-medium">Students matched</th>
-                      <th className="px-6 py-4 font-medium">Top missing skill</th>
+                      <th className="px-6 py-4 font-medium">Avg. openings</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
-                    {policymakerFields.map((item) => {
+                    {fields.map((item) => {
                       const trend = trendStyles[item.trend]
                       const TrendIcon = trend.icon
                       return (
@@ -78,8 +122,7 @@ export default function PolicymakerPage() {
                               <TrendIcon className="h-4 w-4" aria-hidden="true" /> {trend.label}
                             </span>
                           </td>
-                          <td className="px-4 py-4 font-medium text-foreground">{item.studentsMatched.toLocaleString()}</td>
-                          <td className="px-6 py-4 text-muted-foreground">{item.topMissingSkill}</td>
+                          <td className="px-6 py-4 font-medium text-foreground">{item.avgOpenings.toLocaleString()}</td>
                         </tr>
                       )
                     })}
@@ -107,7 +150,7 @@ export default function PolicymakerPage() {
                 ))}
                 <div className="flex items-center gap-3 rounded-xl bg-sky-50 p-4 text-sm text-sky-800">
                   <Users className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-                  <span>High-demand fields currently lead student interest.</span>
+                  <span>High-demand fields currently lead the dataset.</span>
                 </div>
               </CardContent>
             </Card>
@@ -116,10 +159,10 @@ export default function PolicymakerPage() {
           <Card className="mt-6 border-primary/15 bg-gradient-to-br from-sky-50 to-teal-50/70">
             <CardHeader>
               <CardTitle>Biggest Skill Gaps This Month</CardTitle>
-              <CardDescription>Skills most commonly missing across matched student profiles.</CardDescription>
+              <CardDescription>Core skills most in demand across high-growth fields.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {policymakerGapSkills.map((skill, index) => (
+              {gapSkills.map((skill, index) => (
                 <div key={skill} className="flex items-center gap-3 rounded-xl border border-white/80 bg-white/75 p-4 shadow-sm">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">{index + 1}</span>
                   <span className="font-semibold text-foreground">{skill}</span>
