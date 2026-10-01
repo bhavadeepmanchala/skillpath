@@ -10,7 +10,8 @@ import { dummyAnalysis } from "@/lib/skill-data"
 
 async function fetchAnalysis(skills: string[], interest?: string) {
   try {
-    const res = await fetch("http://127.0.0.1:8080/api/analyze", {
+    const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8080"
+const res = await fetch(`${BACKEND_URL}/api/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skills, careerInterest: interest ?? null }),

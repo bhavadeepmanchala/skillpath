@@ -29,7 +29,8 @@ async function fetchPolicymakerData(): Promise<{
   gapSkills: string[]
 } | null> {
   try {
-    const res = await fetch("http://127.0.0.1:8080/api/policymaker", { cache: "no-store" })
+const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8080"
+const res = await fetch(`${BACKEND_URL}/api/policymaker`, { cache: "no-store" })
     if (!res.ok) throw new Error(`Backend returned ${res.status}`)
     const data = await res.json()
 
