@@ -3,8 +3,8 @@
 import type React from "react"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
-import { ArrowRight, Sparkles, X } from "lucide-react"
+import { useState, useTransition } from "react"
+import { ArrowRight, Loader2, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -20,6 +20,7 @@ import { careerInterests } from "@/lib/skill-data"
 
 export default function AnalyzePage() {
   const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const [skills, setSkills] = useState<string[]>(["HTML", "CSS", "JavaScript", "React"])
   const [draft, setDraft] = useState("")
   const [interest, setInterest] = useState<string | null>(null)
@@ -56,7 +57,8 @@ export default function AnalyzePage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    // Merge any unsubmitted draft, then hand off to the results dashboard.
+    if (isPending) return
+
     const all = [...skills]
     draft
       .split(",")
@@ -69,7 +71,10 @@ export default function AnalyzePage() {
     const params = new URLSearchParams()
     if (all.length) params.set("skills", all.join(","))
     if (interest) params.set("interest", interest)
-    router.push(`/results?${params.toString()}`)
+
+    startTransition(() => {
+      router.push(`/results?${params.toString()}`)
+    })
   }
 
   return (
@@ -146,10 +151,24 @@ export default function AnalyzePage() {
                   </Select>
                 </div>
 
-                <Button type="submit" size="lg" className="h-12 text-base" disabled={skills.length === 0 && draft.trim() === ""}>
-                  <Sparkles className="mr-1 h-5 w-5" aria-hidden="true" />
-                  Analyze My Skills
-                  <ArrowRight className="ml-1 h-5 w-5" aria-hidden="true" />
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="h-12 text-base"
+                  disabled={isPending || (skills.length === 0 && draft.trim() === "")}
+                >
+                  {isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
+                      Analyzing…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-1 h-5 w-5" aria-hidden="true" />
+                      Analyze My Skills
+                      <ArrowRight className="ml-1 h-5 w-5" aria-hidden="true" />
+                    </>
+                  )}
                 </Button>
               </form>
             </CardContent>
