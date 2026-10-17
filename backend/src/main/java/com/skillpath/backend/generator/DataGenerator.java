@@ -1,5 +1,6 @@
 package com.skillpath.backend.generator;
 
+import java.sql.Date;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -13,11 +14,28 @@ import org.springframework.transaction.annotation.Transactional;
 public class DataGenerator {
 
     private static final Logger log = LoggerFactory.getLogger(DataGenerator.class);
+    private static final int BATCH_SIZE = 5000;
 
     private final JdbcTemplate jdbcTemplate;
+    private final GeneratorProperties properties;
+    private final PostingGenerator postingGenerator;
+    private final DemandMonthlyRebuilder demandMonthlyRebuilder;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DataGenerator(
+        JdbcTemplate jdbcTemplate,
+        GeneratorProperties properties,
+        PostingGenerator postingGenerator,
+        DemandMonthlyRebuilder demandMonthlyRebuilder
+    ) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.properties = properties;
+        this.postingGenerator = postingGenerator;
+        this.demandMonthlyRebuilder = demandMonthlyRebuilder;
+    }
 
     public DataGenerator(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+        this(jdbcTemplate, new GeneratorProperties(), new PostingGenerator(), new DemandMonthlyRebuilder(jdbcTemplate));
     }
 
     /**
@@ -65,32 +83,64 @@ public class DataGenerator {
     }
 
     /**
-     * Loads reference data into the database in ONE transaction.
-     * If any reference table (skill, skill_alias, role, district) is non-empty,
-     * throws {@link IllegalStateException}.
+     * Pure dataset generation including reference data and synthetic job postings.
+     *
+     * @param seed master seed for deterministic random generation
+     * @return complete {@link GeneratedDataset} snapshot
+     */
+    public GeneratedDataset generate(long seed) {
+        ReferenceData refData = generateReferenceData();
+        PostingData postingData = postingGenerator.generate(refData, seed, properties);
+        return new GeneratedDataset(refData, postingData);
+    }
+
+    /**
+     * Loads reference data and synthetic postings into the database in ONE transaction,
+     * then rebuilds demand_monthly aggregates.
+     * Delegates to {@link #run(long)} using configured properties seed.
      */
     @Transactional
     public void run() {
+        run(properties.getSeed());
+    }
+
+    /**
+     * Loads reference data and synthetic postings into the database in ONE transaction using
+     * the specified seed, then rebuilds demand_monthly.
+     * If any of the 7 owned tables is non-empty, throws {@link IllegalStateException}.
+     *
+     * @param seed master seed for generation
+     */
+    @Transactional
+    public void run(long seed) {
         long skillCount = queryRowCount("skill");
         long aliasCount = queryRowCount("skill_alias");
         long roleCount = queryRowCount("role");
         long districtCount = queryRowCount("district");
+        long postingCount = queryRowCount("job_posting");
+        long postingSkillCount = queryRowCount("posting_skill");
+        long demandMonthlyCount = queryRowCount("demand_monthly");
 
-        if (skillCount > 0 || aliasCount > 0 || roleCount > 0 || districtCount > 0) {
+        if (skillCount > 0 || aliasCount > 0 || roleCount > 0 || districtCount > 0
+                || postingCount > 0 || postingSkillCount > 0 || demandMonthlyCount > 0) {
             throw new IllegalStateException(String.format(
-                "Database reference tables are not empty (skill: %d, skill_alias: %d, role: %d, district: %d). "
+                "Database reference or posting tables are not empty "
+                    + "(skill: %d, skill_alias: %d, role: %d, district: %d, job_posting: %d, posting_skill: %d, demand_monthly: %d). "
                     + "Clear the database before running data generator.",
-                skillCount, aliasCount, roleCount, districtCount
+                skillCount, aliasCount, roleCount, districtCount,
+                postingCount, postingSkillCount, demandMonthlyCount
             ));
         }
 
-        ReferenceData data = generateReferenceData();
+        GeneratedDataset dataset = generate(seed);
+        ReferenceData refData = dataset.referenceData();
+        PostingData postingData = dataset.postingData();
 
         // 1. skill
         jdbcTemplate.batchUpdate(
             "INSERT INTO skill (id, name, category, active) VALUES (?, ?, ?, ?)",
-            data.skills(),
-            data.skills().size(),
+            refData.skills(),
+            BATCH_SIZE,
             (ps, s) -> {
                 ps.setLong(1, s.id());
                 ps.setString(2, s.name());
@@ -102,8 +152,8 @@ public class DataGenerator {
         // 2. skill_alias
         jdbcTemplate.batchUpdate(
             "INSERT INTO skill_alias (skill_id, alias) VALUES (?, ?)",
-            data.aliases(),
-            data.aliases().size(),
+            refData.aliases(),
+            BATCH_SIZE,
             (ps, a) -> {
                 ps.setLong(1, a.skillId());
                 ps.setString(2, a.alias());
@@ -113,8 +163,8 @@ public class DataGenerator {
         // 3. role
         jdbcTemplate.batchUpdate(
             "INSERT INTO role (id, name, sector) VALUES (?, ?, ?)",
-            data.roles(),
-            data.roles().size(),
+            refData.roles(),
+            BATCH_SIZE,
             (ps, r) -> {
                 ps.setLong(1, r.id());
                 ps.setString(2, r.name());
@@ -125,8 +175,8 @@ public class DataGenerator {
         // 4. district
         jdbcTemplate.batchUpdate(
             "INSERT INTO district (id, name, state) VALUES (?, ?, ?)",
-            data.districts(),
-            data.districts().size(),
+            refData.districts(),
+            BATCH_SIZE,
             (ps, d) -> {
                 ps.setLong(1, d.id());
                 ps.setString(2, d.name());
@@ -134,8 +184,44 @@ public class DataGenerator {
             }
         );
 
-        log.info("Seeded reference tables: {} skills, {} skill aliases, {} roles, {} districts",
-            data.skills().size(), data.aliases().size(), data.roles().size(), data.districts().size());
+        // 5. job_posting
+        jdbcTemplate.batchUpdate(
+            "INSERT INTO job_posting (id, role_id, district_id, posted_on, level) VALUES (?, ?, ?, ?, ?)",
+            postingData.postings(),
+            BATCH_SIZE,
+            (ps, p) -> {
+                ps.setLong(1, p.id());
+                ps.setLong(2, p.roleId());
+                ps.setLong(3, p.districtId());
+                ps.setDate(4, Date.valueOf(p.postedOn()));
+                ps.setString(5, p.level());
+            }
+        );
+
+        // 6. posting_skill
+        jdbcTemplate.batchUpdate(
+            "INSERT INTO posting_skill (posting_id, skill_id, required_level) VALUES (?, ?, ?)",
+            postingData.postingSkills(),
+            BATCH_SIZE,
+            (ps, s) -> {
+                ps.setLong(1, s.postingId());
+                ps.setLong(2, s.skillId());
+                ps.setString(3, s.requiredLevel());
+            }
+        );
+
+        // 7. demand_monthly rebuild
+        demandMonthlyRebuilder.rebuild();
+
+        log.info("Seeded 7 generator tables: skill={}, skill_alias={}, role={}, district={}, job_posting={}, posting_skill={}, demand_monthly={}",
+            queryRowCount("skill"),
+            queryRowCount("skill_alias"),
+            queryRowCount("role"),
+            queryRowCount("district"),
+            queryRowCount("job_posting"),
+            queryRowCount("posting_skill"),
+            queryRowCount("demand_monthly")
+        );
     }
 
     private long queryRowCount(String tableName) {

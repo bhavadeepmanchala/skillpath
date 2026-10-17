@@ -28,9 +28,9 @@ public final class SkillCatalog {
         new SkillDef("JavaScript", "Web & Mobile", List.of("JS")),
         new SkillDef("TypeScript", "Web & Mobile", List.of("TS")),
         new SkillDef("React", "Web & Mobile", List.of("ReactJS")),
-        new SkillDef("Angular", "Web & Mobile", List.of("AngularJS")),
+        new SkillDef("Angular", "Web & Mobile", List.of()),
         new SkillDef("Node.js", "Web & Mobile", List.of("NodeJS")),
-        new SkillDef("HTML5 & CSS3", "Web & Mobile", List.of("Web Markup")),
+        new SkillDef("HTML5 & CSS3", "Web & Mobile", List.of("HTML/CSS")),
         new SkillDef("Android Development", "Web & Mobile", List.of()),
         new SkillDef("Flutter", "Web & Mobile", List.of()),
 
@@ -39,7 +39,7 @@ public final class SkillCatalog {
         new SkillDef("Artificial Intelligence", "Data & AI", List.of("AI")),
         new SkillDef("Deep Learning", "Data & AI", List.of("DL")),
         new SkillDef("Natural Language Processing", "Data & AI", List.of("NLP")),
-        new SkillDef("Computer Vision", "Data & AI", List.of("CV")),
+        new SkillDef("Computer Vision", "Data & AI", List.of()),
         new SkillDef("SQL", "Data & AI", List.of("Structured Query Language")),
         new SkillDef("Data Analysis", "Data & AI", List.of()),
         new SkillDef("Data Visualization", "Data & AI", List.of()),
@@ -48,7 +48,7 @@ public final class SkillCatalog {
         new SkillDef("Amazon Web Services", "Cloud & DevOps", List.of("AWS")),
         new SkillDef("Google Cloud Platform", "Cloud & DevOps", List.of("GCP")),
         new SkillDef("Microsoft Azure", "Cloud & DevOps", List.of("Azure Cloud")),
-        new SkillDef("Docker", "Cloud & DevOps", List.of("Containerization")),
+        new SkillDef("Docker", "Cloud & DevOps", List.of()),
         new SkillDef("Kubernetes", "Cloud & DevOps", List.of("K8s")),
         new SkillDef("Continuous Integration & Deployment", "Cloud & DevOps", List.of("CI/CD")),
         new SkillDef("Linux System Administration", "Cloud & DevOps", List.of()),
@@ -69,13 +69,12 @@ public final class SkillCatalog {
         new SkillDef("Electrical Power Systems", "Electrical & Mechanical", List.of()),
         new SkillDef("Pneumatics & Hydraulics", "Electrical & Mechanical", List.of()),
 
-        // Manufacturing & Quality (6)
+        // Manufacturing & Quality (5)
         new SkillDef("Six Sigma", "Manufacturing & Quality", List.of()),
         new SkillDef("Lean Manufacturing", "Manufacturing & Quality", List.of()),
         new SkillDef("Quality Control & Assurance", "Manufacturing & Quality", List.of()),
         new SkillDef("Total Productive Maintenance", "Manufacturing & Quality", List.of()),
         new SkillDef("Industrial Safety & OSHA", "Manufacturing & Quality", List.of()),
-        new SkillDef("Supply Chain Analytics", "Manufacturing & Quality", List.of()),
 
         // Healthcare & Care (7)
         new SkillDef("Patient Assessment", "Healthcare & Care", List.of()),
@@ -104,13 +103,14 @@ public final class SkillCatalog {
         new SkillDef("Credit Analysis", "Finance & Accounting", List.of()),
         new SkillDef("Internal Auditing", "Finance & Accounting", List.of()),
 
-        // Logistics & Supply Chain (6)
+        // Logistics & Supply Chain (7)
         new SkillDef("Warehouse Inventory Management", "Logistics & Supply Chain", List.of()),
         new SkillDef("Fleet Routing & Dispatch", "Logistics & Supply Chain", List.of()),
         new SkillDef("Freight Forwarding", "Logistics & Supply Chain", List.of()),
         new SkillDef("Procurement & Sourcing", "Logistics & Supply Chain", List.of()),
         new SkillDef("Cold Chain Logistics", "Logistics & Supply Chain", List.of()),
         new SkillDef("Material Handling Equipment", "Logistics & Supply Chain", List.of()),
+        new SkillDef("Supply Chain Analytics", "Logistics & Supply Chain", List.of()),
 
         // Workplace & Soft Skills (5)
         new SkillDef("Business Communication", "Workplace & Soft Skills", List.of()),

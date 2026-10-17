@@ -18,13 +18,12 @@ public final class DistrictCatalog {
         new DistrictDef("Pune", "Maharashtra"),
         new DistrictDef("Nagpur", "Maharashtra"),
         new DistrictDef("Nashik", "Maharashtra"),
-        new DistrictDef("Kolhapur", "Maharashtra"),
+        new DistrictDef("Gadchiroli", "Maharashtra"),
 
-        // Tamil Nadu (4)
+        // Tamil Nadu (3)
         new DistrictDef("Chennai", "Tamil Nadu"),
         new DistrictDef("Coimbatore", "Tamil Nadu"),
         new DistrictDef("Madurai", "Tamil Nadu"),
-        new DistrictDef("Tiruchirappalli", "Tamil Nadu"),
 
         // Telangana (3)
         new DistrictDef("Hyderabad", "Telangana"),
@@ -36,10 +35,9 @@ public final class DistrictCatalog {
         new DistrictDef("Surat", "Gujarat"),
         new DistrictDef("Vadodara", "Gujarat"),
 
-        // Uttar Pradesh (4)
+        // Uttar Pradesh (3)
         new DistrictDef("Gautam Buddha Nagar", "Uttar Pradesh"),
         new DistrictDef("Lucknow", "Uttar Pradesh"),
-        new DistrictDef("Kanpur Nagar", "Uttar Pradesh"),
         new DistrictDef("Varanasi", "Uttar Pradesh"),
 
         // Rajasthan (3)
@@ -63,7 +61,24 @@ public final class DistrictCatalog {
 
         // Haryana (2)
         new DistrictDef("Gurugram", "Haryana"),
-        new DistrictDef("Faridabad", "Haryana")
+        new DistrictDef("Faridabad", "Haryana"),
+
+        // Bihar (2)
+        new DistrictDef("Patna", "Bihar"),
+        new DistrictDef("Araria", "Bihar"),
+
+        // Jharkhand (1)
+        new DistrictDef("Ranchi", "Jharkhand"),
+
+        // Odisha (2)
+        new DistrictDef("Khordha", "Odisha"),
+        new DistrictDef("Koraput", "Odisha"),
+
+        // Assam (1)
+        new DistrictDef("Kamrup Metropolitan", "Assam"),
+
+        // Andhra Pradesh (1)
+        new DistrictDef("Visakhapatnam", "Andhra Pradesh")
     );
 
     private DistrictCatalog() {}
