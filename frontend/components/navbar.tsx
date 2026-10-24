@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Compass } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export function Navbar() {
   return (
@@ -24,6 +25,14 @@ export function Navbar() {
           >
             How it works
           </Link>
+          <Button
+            render={<Link href="/login" />}
+            nativeButton={false}
+            size="sm"
+            variant="outline"
+          >
+            Login
+          </Button>
         </nav>
       </div>
     </header>
