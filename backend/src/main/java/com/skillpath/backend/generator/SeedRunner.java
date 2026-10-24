@@ -17,10 +17,12 @@ public class SeedRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(SeedRunner.class);
 
     private final DataGenerator dataGenerator;
+    private final CourseGenerator courseGenerator;
     private final DataSource dataSource;
 
-    public SeedRunner(DataGenerator dataGenerator, DataSource dataSource) {
+    public SeedRunner(DataGenerator dataGenerator, CourseGenerator courseGenerator, DataSource dataSource) {
         this.dataGenerator = dataGenerator;
+        this.courseGenerator = courseGenerator;
         this.dataSource = dataSource;
     }
 
@@ -48,6 +50,7 @@ public class SeedRunner implements ApplicationRunner {
         }
 
         dataGenerator.run();
+        courseGenerator.run();
         log.info("Synthetic reference data seeding completed successfully.");
     }
 }
