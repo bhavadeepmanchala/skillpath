@@ -15,7 +15,18 @@ public class GeminiService {
     private String apiKey;
 
 
-    private final RestClient restClient = RestClient.create();
+    private volatile RestClient restClient;
+
+    private RestClient getRestClient() {
+        if (restClient == null) {
+            synchronized (this) {
+                if (restClient == null) {
+                    restClient = RestClient.create();
+                }
+            }
+        }
+        return restClient;
+    }
 
     public String getAdvice(String fieldName, List<String> haveSkills, List<String> missingSkills) {
         String prompt = String.format(
@@ -33,7 +44,7 @@ public class GeminiService {
                     )
             );
 
-            Map<String, Object> response = restClient.post()
+            Map<String, Object> response = getRestClient().post()
                     .uri("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent")
                     .header("x-goog-api-key", apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
