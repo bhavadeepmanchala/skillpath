@@ -84,7 +84,7 @@ export default async function SkillAnalysisPage({
       <div className="grid gap-6 md:grid-cols-2">
         <BestMatchCard
           field={result.bestField}
-          score={result.matchScore}
+          matchScore={result.matchScore}
           demand={result.demand}
           trend={result.trend}
         />

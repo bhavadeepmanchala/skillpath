@@ -131,7 +131,7 @@ export default function DescribeMyselfPage() {
                 Career interest{" "}
                 <span className="font-normal text-muted-foreground">(optional)</span>
               </Label>
-              <Select value={interest ?? undefined} onValueChange={(v) => setInterest(v)}>
+              <Select value={interest ?? null} onValueChange={(v) => setInterest(v)}>
                 <SelectTrigger id="interest" className="w-full">
                   <SelectValue placeholder="Select a field that excites you" />
                 </SelectTrigger>
