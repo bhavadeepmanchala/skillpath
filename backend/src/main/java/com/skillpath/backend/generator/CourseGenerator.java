@@ -1,6 +1,9 @@
 package com.skillpath.backend.generator;
 
+import java.sql.Date;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -36,9 +39,13 @@ public class CourseGenerator {
         String name,
         String sector,
         int durationWeeks,
-        String primaryRole,
+        List<String> linkedRoles,
         List<String> candidateSkills
-    ) {}
+    ) {
+        CourseTemplate(String name, String sector, int durationWeeks, String primaryRole, List<String> candidateSkills) {
+            this(name, sector, durationWeeks, List.of(primaryRole), candidateSkills);
+        }
+    }
 
     private record CourseRow(long id, String name, int durationWeeks, String sector) {}
     private record CourseSkillRow(long courseId, long skillId, String taughtLevel) {}
@@ -46,7 +53,10 @@ public class CourseGenerator {
     private record CourseOfferingRow(long courseId, long districtId, int year, int seats, int trainers) {}
     private record PlacementOutcomeRow(long courseId, long districtId, int year, double placedPct) {}
 
+    // Planted UNTAUGHT skill: Critical Thinking & Problem Solving (Rank #3 nationally with 25.3% 3-month demand share; 0 courses teach it)
+    // Business Communication (Rank #2 nationally) is also kept untaught across all courses.
     private static final List<CourseTemplate> COURSE_TEMPLATES = List.of(
+        // Existing 20 courses preserved in exact order and IDs
         new CourseTemplate(
             "Full Stack Web Development",
             Sectors.IT_AND_SOFTWARE,
@@ -54,6 +64,8 @@ public class CourseGenerator {
             "Software Engineer",
             List.of("JavaScript", "TypeScript", "React", "Node.js", "HTML5 & CSS3", "Java", "SQL", "Object-Oriented Programming")
         ),
+        // Planted OVERSUPPLIED course: Course 2 (Data Science & Machine Learning)
+        // In at least 60% of the districts where it is offered (here 100%), factor = 3.0 to 4.5
         new CourseTemplate(
             "Data Science & Machine Learning",
             Sectors.IT_AND_SOFTWARE,
@@ -68,12 +80,14 @@ public class CourseGenerator {
             "DevOps Engineer",
             List.of("Docker", "Kubernetes", "Amazon Web Services", "Continuous Integration & Deployment", "Linux System Administration", "Google Cloud Platform", "Microsoft Azure", "Python")
         ),
+        // Planted LOW-COVERAGE course: Course 4 (Modern Frontend Engineering) linked to Software Engineer (Role 1)
+        // Teaches only 1 of Software Engineer's top 15 skills (HTML5 & CSS3) and the rest from low-demand/occasional skills for that role
         new CourseTemplate(
             "Modern Frontend Engineering",
             Sectors.IT_AND_SOFTWARE,
             10,
             "Software Engineer",
-            List.of("React", "JavaScript", "TypeScript", "HTML5 & CSS3", "Android Development", "Flutter", "Node.js", "Data Structures & Algorithms")
+            List.of("HTML5 & CSS3", "Flutter", "Android Development", "C#", "C++", "Go")
         ),
         new CourseTemplate(
             "Backend Systems Architecture",
@@ -143,7 +157,7 @@ public class CourseGenerator {
             Sectors.RETAIL_AND_ECOMMERCE,
             8,
             "Retail Store Executive",
-            List.of("Retail Store Inventory", "Point of Sale Systems", "Customer Relationship Management", "Visual Merchandising", "Sales Negotiation", "Business Communication")
+            List.of("Retail Store Inventory", "Point of Sale Systems", "Customer Relationship Management", "Visual Merchandising", "Sales Negotiation")
         ),
         new CourseTemplate(
             "E-Commerce Operations & Digital Marketing",
@@ -186,6 +200,37 @@ public class CourseGenerator {
             10,
             "Logistics Coordinator",
             List.of("Supply Chain Analytics", "Freight Forwarding", "Procurement & Sourcing", "Fleet Routing & Dispatch", "Warehouse Inventory Management", "Cold Chain Logistics")
+        ),
+        // Planted OBSOLETE-LOOKING course: Course 21 (Legacy Retail & Point of Sale Operations)
+        // Mainly teaches declining skills (Retail Store Inventory, Point of Sale Systems) linked to Retail Store Executive
+        new CourseTemplate(
+            "Legacy Retail & Point of Sale Operations",
+            Sectors.RETAIL_AND_ECOMMERCE,
+            8,
+            List.of("Retail Store Executive"),
+            List.of("Retail Store Inventory", "Point of Sale Systems", "Visual Merchandising", "Customer Relationship Management", "Tally Prime")
+        ),
+        // Additional normal courses (total 24)
+        new CourseTemplate(
+            "Supply Chain Analytics & Sourcing",
+            Sectors.LOGISTICS,
+            10,
+            List.of("Supply Chain Associate", "Logistics Coordinator"),
+            List.of("Procurement & Sourcing", "Supply Chain Analytics", "Freight Forwarding", "Warehouse Inventory Management", "Sales Negotiation", "Cost Accounting")
+        ),
+        new CourseTemplate(
+            "Cloud Security & DevSecOps",
+            Sectors.IT_AND_SOFTWARE,
+            12,
+            List.of("DevOps Engineer", "Software Engineer"),
+            List.of("Docker", "Kubernetes", "Continuous Integration & Deployment", "Amazon Web Services", "Linux System Administration", "Python", "Google Cloud Platform")
+        ),
+        new CourseTemplate(
+            "Industrial Automation & PLC Systems",
+            Sectors.ELECTRONICS_AND_ELECTRICAL,
+            12,
+            List.of("Electrical Maintenance Technician", "Embedded Systems Engineer"),
+            List.of("Electrical Power Systems", "PLC Programming", "HVAC Systems", "Total Productive Maintenance", "Microcontrollers", "Industrial Safety & OSHA")
         )
     );
 
@@ -218,6 +263,26 @@ public class CourseGenerator {
 
         List<Long> districtIds = jdbcTemplate.queryForList("SELECT id FROM district ORDER BY id", Long.class);
 
+        // Pre-query job postings over the last 12 months ending at latest posted_on date
+        Date maxDateSql = jdbcTemplate.queryForObject("SELECT MAX(posted_on) FROM job_posting", Date.class);
+        LocalDate windowEnd = (maxDateSql != null) ? maxDateSql.toLocalDate() : properties.getAsOfDate();
+        LocalDate windowStart = windowEnd.minusMonths(12).plusDays(1);
+
+        Map<Long, Map<Long, Integer>> postingsByDistrictAndRole = new TreeMap<>();
+        if (maxDateSql != null) {
+            jdbcTemplate.query(
+                "SELECT district_id, role_id, COUNT(*) AS cnt FROM job_posting WHERE posted_on >= ? AND posted_on <= ? GROUP BY district_id, role_id",
+                rs -> {
+                    long dId = rs.getLong("district_id");
+                    long rId = rs.getLong("role_id");
+                    int count = rs.getInt("cnt");
+                    postingsByDistrictAndRole.computeIfAbsent(dId, k -> new TreeMap<>()).put(rId, count);
+                },
+                Date.valueOf(windowStart),
+                Date.valueOf(windowEnd)
+            );
+        }
+
         List<CourseRow> courseRows = new ArrayList<>(COURSE_TEMPLATES.size());
         List<CourseSkillRow> courseSkillRows = new ArrayList<>();
         List<CourseRoleRow> courseRoleRows = new ArrayList<>();
@@ -228,9 +293,13 @@ public class CourseGenerator {
         for (CourseTemplate template : COURSE_TEMPLATES) {
             courseRows.add(new CourseRow(courseId, template.name(), template.durationWeeks(), template.sector()));
 
-            Long roleId = roleIdsByName.get(template.primaryRole());
-            if (roleId != null) {
-                courseRoleRows.add(new CourseRoleRow(courseId, roleId));
+            List<Long> linkedRoleIds = new ArrayList<>();
+            for (String roleName : template.linkedRoles()) {
+                Long roleId = roleIdsByName.get(roleName);
+                if (roleId != null) {
+                    courseRoleRows.add(new CourseRoleRow(courseId, roleId));
+                    linkedRoleIds.add(roleId);
+                }
             }
 
             // Each course teaches 4-8 existing skills
@@ -243,7 +312,7 @@ public class CourseGenerator {
             }
             int minSkills = 4;
             int maxSkills = Math.min(8, pool.size());
-            int numSkills = minSkills + skillRng.nextInt(maxSkills - minSkills + 1);
+            int numSkills = minSkills + (maxSkills > minSkills ? skillRng.nextInt(maxSkills - minSkills + 1) : 0);
             for (int i = 0; i < numSkills; i++) {
                 String skillName = pool.get(i);
                 Long skillId = skillIdsByName.get(skillName);
@@ -264,9 +333,26 @@ public class CourseGenerator {
 
             int[] years = new int[]{2025, 2026};
             for (Long districtId : pickedDistricts) {
+                int baseOpenings = 0;
+                Map<Long, Integer> roleMap = postingsByDistrictAndRole.get(districtId);
+                if (roleMap != null) {
+                    for (Long rId : linkedRoleIds) {
+                        baseOpenings += roleMap.getOrDefault(rId, 0);
+                    }
+                }
+
                 for (int year : years) {
-                    int seats = 30 + offeringRng.nextInt(5) * 10;
-                    int trainers = 1 + offeringRng.nextInt(3);
+                    double factor;
+                    if (courseId == 2) {
+                        // Planted OVERSUPPLIED course: Course 2 (Data Science & Machine Learning)
+                        // In at least 60% of districts where offered (here 100%), factor = 3.0 to 4.5
+                        factor = 3.0 + offeringRng.nextDouble() * 1.5;
+                    } else {
+                        factor = 0.6 + offeringRng.nextDouble() * 0.8;
+                    }
+
+                    int seats = Math.max(10, (int) Math.round(baseOpenings * factor));
+                    int trainers = Math.max(1, (int) Math.round((double) seats / 25.0));
                     offeringRows.add(new CourseOfferingRow(courseId, districtId, year, seats, trainers));
 
                     double placedPct = 55.0 + offeringRng.nextInt(35);
