@@ -28,10 +28,11 @@ public class FlagController {
     @GetMapping
     public FlagsResponse getFlags(
         @RequestParam(name = "district", required = false) Long district,
-        @RequestParam(name = "districtId", required = false) Long districtId
+        @RequestParam(name = "districtId", required = false) Long districtId,
+        @RequestParam(name = "minOpenings", required = false) Integer minOpenings
     ) {
         Long effectiveDistrictId = (district != null) ? district : districtId;
-        return oversupplyService.getFlags(effectiveDistrictId);
+        return oversupplyService.getFlags(effectiveDistrictId, null, null, null, minOpenings);
     }
 
     @ExceptionHandler(BadRequestException.class)

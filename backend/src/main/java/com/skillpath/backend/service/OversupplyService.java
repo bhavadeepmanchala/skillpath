@@ -19,21 +19,24 @@ public class OversupplyService {
     private final int windowMonths;
     private final double scalingFactor;
     private final double oversupplyThreshold;
+    private final int minOpenings;
 
     public OversupplyService(
         JdbcTemplate jdbcTemplate,
         @Value("${skillpath.flags.window-months:12}") int windowMonths,
         @Value("${skillpath.flags.openings-scaling-factor:1.0}") double scalingFactor,
-        @Value("${skillpath.flags.oversupply-ratio-threshold:1.5}") double oversupplyThreshold
+        @Value("${skillpath.flags.oversupply-ratio-threshold:1.5}") double oversupplyThreshold,
+        @Value("${skillpath.flags.min-openings:20}") int minOpenings
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.windowMonths = windowMonths;
         this.scalingFactor = scalingFactor;
         this.oversupplyThreshold = oversupplyThreshold;
+        this.minOpenings = minOpenings;
     }
 
     public FlagsResponse getFlags(Long districtId) {
-        return getFlags(districtId, this.windowMonths, this.scalingFactor, this.oversupplyThreshold);
+        return getFlags(districtId, this.windowMonths, this.scalingFactor, this.oversupplyThreshold, this.minOpenings);
     }
 
     public FlagsResponse getFlags(
@@ -41,6 +44,16 @@ public class OversupplyService {
         Integer overrideWindowMonths,
         Double overrideScalingFactor,
         Double overrideThreshold
+    ) {
+        return getFlags(districtId, overrideWindowMonths, overrideScalingFactor, overrideThreshold, this.minOpenings);
+    }
+
+    public FlagsResponse getFlags(
+        Long districtId,
+        Integer overrideWindowMonths,
+        Double overrideScalingFactor,
+        Double overrideThreshold,
+        Integer overrideMinOpenings
     ) {
         if (districtId != null) {
             Integer count = jdbcTemplate.queryForObject(
@@ -56,6 +69,7 @@ public class OversupplyService {
         int effectiveWindowMonths = (overrideWindowMonths != null) ? overrideWindowMonths : this.windowMonths;
         double effectiveScalingFactor = (overrideScalingFactor != null) ? overrideScalingFactor : this.scalingFactor;
         double effectiveThreshold = (overrideThreshold != null) ? overrideThreshold : this.oversupplyThreshold;
+        int effectiveMinOpenings = (overrideMinOpenings != null) ? overrideMinOpenings : this.minOpenings;
 
         Date maxDateSql = jdbcTemplate.queryForObject(
             "SELECT MAX(posted_on) FROM job_posting",
@@ -127,12 +141,15 @@ public class OversupplyService {
 
                 double estimatedOpenings = postingsInWindow * effectiveScalingFactor;
                 Double oversupplyRatio = null;
-                boolean oversupplied = false;
+                boolean lowSample = estimatedOpenings < effectiveMinOpenings;
 
                 if (estimatedOpenings > 0.0) {
                     oversupplyRatio = (double) seats / estimatedOpenings;
-                    oversupplied = oversupplyRatio > effectiveThreshold;
                 }
+
+                boolean oversupplied = oversupplyRatio != null
+                    && oversupplyRatio > effectiveThreshold
+                    && !lowSample;
 
                 return new CourseOversupplyItem(
                     courseId,
@@ -146,7 +163,8 @@ public class OversupplyService {
                     postingsInWindow,
                     estimatedOpenings,
                     oversupplyRatio,
-                    oversupplied
+                    oversupplied,
+                    lowSample
                 );
             },
             params.toArray()
@@ -167,6 +185,7 @@ public class OversupplyService {
             windowEnd,
             effectiveScalingFactor,
             effectiveThreshold,
+            effectiveMinOpenings,
             items
         );
     }

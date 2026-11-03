@@ -12,6 +12,7 @@ public record FlagsResponse(
     LocalDate windowEnd,
     double scalingFactor,
     double oversupplyThreshold,
+    int minOpenings,
     List<CourseOversupplyItem> items
 ) {}
 

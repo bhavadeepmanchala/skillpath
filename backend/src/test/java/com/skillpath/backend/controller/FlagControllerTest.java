@@ -207,8 +207,9 @@ class FlagControllerTest {
             .andExpect(jsonPath("$.windowEnd", is("2026-09-30")))
             .andExpect(jsonPath("$.scalingFactor", closeTo(1.0, TOLERANCE)))
             .andExpect(jsonPath("$.oversupplyThreshold", closeTo(1.5, TOLERANCE)))
+            .andExpect(jsonPath("$.minOpenings", is(20)))
             .andExpect(jsonPath("$.items", hasSize(4)))
-            // Rank 1: Course 2 in District 1 (ratio = 2.0, oversupplied = true)
+            // Rank 1: Course 2 in District 1 (ratio = 2.0, oversupplied = true, lowSample = false)
             .andExpect(jsonPath("$.items[0].courseId", is(2)))
             .andExpect(jsonPath("$.items[0].courseName", is("Digital Media Design")))
             .andExpect(jsonPath("$.items[0].districtId", is(1)))
@@ -221,7 +222,8 @@ class FlagControllerTest {
             .andExpect(jsonPath("$.items[0].estimatedOpenings", closeTo(20.0, TOLERANCE)))
             .andExpect(jsonPath("$.items[0].oversupplyRatio", closeTo(2.0, TOLERANCE)))
             .andExpect(jsonPath("$.items[0].oversupplied", is(true)))
-            // Rank 2: Course 1 in District 1 (ratio = 1.5, threshold equality -> oversupplied = false)
+            .andExpect(jsonPath("$.items[0].lowSample", is(false)))
+            // Rank 2: Course 1 in District 1 (ratio = 1.5, threshold equality -> oversupplied = false, lowSample = false)
             .andExpect(jsonPath("$.items[1].courseId", is(1)))
             .andExpect(jsonPath("$.items[1].courseName", is("Cloud & DevOps Engineering")))
             .andExpect(jsonPath("$.items[1].districtId", is(1)))
@@ -234,7 +236,8 @@ class FlagControllerTest {
             .andExpect(jsonPath("$.items[1].estimatedOpenings", closeTo(40.0, TOLERANCE)))
             .andExpect(jsonPath("$.items[1].oversupplyRatio", closeTo(1.5, TOLERANCE)))
             .andExpect(jsonPath("$.items[1].oversupplied", is(false)))
-            // Rank 3: Course 1 in District 2 (ratio = 0.8, oversupplied = false)
+            .andExpect(jsonPath("$.items[1].lowSample", is(false)))
+            // Rank 3: Course 1 in District 2 (ratio = 0.8, oversupplied = false, lowSample = false)
             .andExpect(jsonPath("$.items[2].courseId", is(1)))
             .andExpect(jsonPath("$.items[2].courseName", is("Cloud & DevOps Engineering")))
             .andExpect(jsonPath("$.items[2].districtId", is(2)))
@@ -247,7 +250,8 @@ class FlagControllerTest {
             .andExpect(jsonPath("$.items[2].estimatedOpenings", closeTo(100.0, TOLERANCE)))
             .andExpect(jsonPath("$.items[2].oversupplyRatio", closeTo(0.8, TOLERANCE)))
             .andExpect(jsonPath("$.items[2].oversupplied", is(false)))
-            // Rank 4: Course 2 in District 2 (0 postings -> ratio = null, oversupplied = false)
+            .andExpect(jsonPath("$.items[2].lowSample", is(false)))
+            // Rank 4: Course 2 in District 2 (0 postings -> ratio = null, oversupplied = false, lowSample = true)
             .andExpect(jsonPath("$.items[3].courseId", is(2)))
             .andExpect(jsonPath("$.items[3].courseName", is("Digital Media Design")))
             .andExpect(jsonPath("$.items[3].districtId", is(2)))
@@ -259,7 +263,8 @@ class FlagControllerTest {
             .andExpect(jsonPath("$.items[3].postingsInWindow", is(0)))
             .andExpect(jsonPath("$.items[3].estimatedOpenings", closeTo(0.0, TOLERANCE)))
             .andExpect(jsonPath("$.items[3].oversupplyRatio", nullValue()))
-            .andExpect(jsonPath("$.items[3].oversupplied", is(false)));
+            .andExpect(jsonPath("$.items[3].oversupplied", is(false)))
+            .andExpect(jsonPath("$.items[3].lowSample", is(true)));
     }
 
     @Test
@@ -349,6 +354,84 @@ class FlagControllerTest {
             .andExpect(jsonPath("$.items[1].courseId", is(1)))
             .andExpect(jsonPath("$.items[1].oversupplyRatio", closeTo(1.5, TOLERANCE)))
             .andExpect(jsonPath("$.items[1].oversupplied", is(false)));
+    }
+
+    @Test
+    void testEstimatedOpeningsJustBelowMinGivesLowSampleTrueAndOversuppliedFalseEvenWithHighRatio() throws Exception {
+        // District 1 Role 3 currently has 20 postings. Replace with 19 postings.
+        jdbcTemplate.execute("DELETE FROM job_posting WHERE district_id = 1 AND role_id = 3");
+        for (long id = 1000L; id < 1019L; id++) {
+            jdbcTemplate.update("INSERT INTO job_posting (id, role_id, district_id, posted_on, level) VALUES (?, 3, 1, '2026-06-01', 'Mid')", id);
+        }
+
+        // Course 2 has 40 seats. estimatedOpenings = 19.0 (< minOpenings 20).
+        // oversupplyRatio = 40 / 19.0 = 2.105263 (> threshold 1.5).
+        // Guard check: lowSample = true and oversupplied = false despite ratio > 1.5.
+        mockMvc.perform(get("/api/flags").param("district", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.minOpenings", is(20)))
+            .andExpect(jsonPath("$.items[0].courseId", is(2)))
+            .andExpect(jsonPath("$.items[0].seats", is(40)))
+            .andExpect(jsonPath("$.items[0].postingsInWindow", is(19)))
+            .andExpect(jsonPath("$.items[0].estimatedOpenings", closeTo(19.0, TOLERANCE)))
+            .andExpect(jsonPath("$.items[0].oversupplyRatio", closeTo(40.0 / 19.0, TOLERANCE)))
+            .andExpect(jsonPath("$.items[0].lowSample", is(true)))
+            .andExpect(jsonPath("$.items[0].oversupplied", is(false)));
+    }
+
+    @Test
+    void testEstimatedOpeningsExactlyAtMinGivesLowSampleFalseAndOversuppliedTrueWhenRatioAboveThreshold() throws Exception {
+        // District 1 Role 3 has 20 postings. Course 2 has 40 seats.
+        // estimatedOpenings = 20.0 (== minOpenings 20).
+        // oversupplyRatio = 40 / 20.0 = 2.0 (> threshold 1.5).
+        // Guard check: lowSample = false, oversupplied = true.
+        mockMvc.perform(get("/api/flags").param("district", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.minOpenings", is(20)))
+            .andExpect(jsonPath("$.items[0].courseId", is(2)))
+            .andExpect(jsonPath("$.items[0].seats", is(40)))
+            .andExpect(jsonPath("$.items[0].postingsInWindow", is(20)))
+            .andExpect(jsonPath("$.items[0].estimatedOpenings", closeTo(20.0, TOLERANCE)))
+            .andExpect(jsonPath("$.items[0].oversupplyRatio", closeTo(2.0, TOLERANCE)))
+            .andExpect(jsonPath("$.items[0].lowSample", is(false)))
+            .andExpect(jsonPath("$.items[0].oversupplied", is(true)));
+    }
+
+    @Test
+    void testNullRatioGivesLowSampleConsistentWithOpeningsZeroAndOversuppliedFalse() throws Exception {
+        // District 2 has 0 postings for Role 3 (Course 2).
+        // estimatedOpenings = 0.0 (< minOpenings 20).
+        // oversupplyRatio = null.
+        // Guard check: lowSample = true, oversupplied = false.
+        mockMvc.perform(get("/api/flags").param("district", "2"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.minOpenings", is(20)))
+            .andExpect(jsonPath("$.items[1].courseId", is(2)))
+            .andExpect(jsonPath("$.items[1].postingsInWindow", is(0)))
+            .andExpect(jsonPath("$.items[1].estimatedOpenings", closeTo(0.0, TOLERANCE)))
+            .andExpect(jsonPath("$.items[1].oversupplyRatio", nullValue()))
+            .andExpect(jsonPath("$.items[1].lowSample", is(true)))
+            .andExpect(jsonPath("$.items[1].oversupplied", is(false)));
+    }
+
+    @Test
+    void testMinOpeningsOverrideQueryParam() throws Exception {
+        // Course 2 in District 1 has 20 postings and ratio 2.0 (> 1.5).
+        // If minOpenings is overridden to 25: 20 < 25 -> lowSample = true, oversupplied = false
+        mockMvc.perform(get("/api/flags").param("district", "1").param("minOpenings", "25"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.minOpenings", is(25)))
+            .andExpect(jsonPath("$.items[0].courseId", is(2)))
+            .andExpect(jsonPath("$.items[0].lowSample", is(true)))
+            .andExpect(jsonPath("$.items[0].oversupplied", is(false)));
+
+        // If minOpenings is overridden to 10: 20 >= 10 -> lowSample = false, oversupplied = true
+        mockMvc.perform(get("/api/flags").param("district", "1").param("minOpenings", "10"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.minOpenings", is(10)))
+            .andExpect(jsonPath("$.items[0].courseId", is(2)))
+            .andExpect(jsonPath("$.items[0].lowSample", is(false)))
+            .andExpect(jsonPath("$.items[0].oversupplied", is(true)));
     }
 }
 

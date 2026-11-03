@@ -12,6 +12,7 @@ public record CourseOversupplyItem(
     Long postingsInWindow,
     Double estimatedOpenings,
     Double oversupplyRatio,
-    Boolean oversupplied
+    Boolean oversupplied,
+    Boolean lowSample
 ) {}
 
