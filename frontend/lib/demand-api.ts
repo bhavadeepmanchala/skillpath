@@ -215,3 +215,152 @@ export async function fetchDemandTrends(params?: {
   }
   return res.json()
 }
+
+export interface RoleItem {
+  id: number
+  name: string
+  sector: string
+}
+
+export interface CourseItem {
+  id: number
+  name: string
+  sector: string
+  durationWeeks: number
+  skillCount: number
+  linkedRoleCount: number
+}
+
+export interface SkillShareItem {
+  skillId: number
+  name: string
+  demandShare: number
+}
+
+export interface CourseAlignmentResponse {
+  courseId: number
+  courseName: string
+  roleId: number
+  roleName: string
+  districtId: number | null
+  windowMonths: number
+  topN: number
+  postingsInScope: number
+  roleLinkedToCourse: boolean
+  coverageScore: number
+  coveredSkills: SkillShareItem[]
+  missingSkills: SkillShareItem[]
+}
+
+export interface CourseOversupplyItem {
+  courseId: number
+  courseName: string
+  districtId: number
+  districtName: string
+  year: number
+  seats: number
+  trainers: number
+  linkedRoleCount: number
+  postingsInWindow: number
+  estimatedOpenings: number | null
+  oversupplyRatio: number | null
+  oversupplied: boolean
+  lowSample: boolean
+}
+
+export interface FlagsResponse {
+  windowMonths: number
+  windowStart: string
+  windowEnd: string
+  scalingFactor: number
+  oversupplyThreshold: number
+  minOpenings: number
+  items: CourseOversupplyItem[]
+}
+
+export interface SkillGapItem {
+  name: string
+  demand_share: number
+  course_coverage: number
+  growth_factor: number
+  gap_score: number
+}
+
+export async function fetchRoles(): Promise<RoleItem[]> {
+  const res = await fetch(`${BACKEND_URL}/api/roles`, { cache: "no-store" })
+  if (!res.ok) {
+    throw new Error(`Roles failed with status ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchCourses(): Promise<CourseItem[]> {
+  const res = await fetch(`${BACKEND_URL}/api/courses`, { cache: "no-store" })
+  if (!res.ok) {
+    throw new Error(`Courses failed with status ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchCourseAlignment(
+  courseId: number,
+  params: {
+    roleId: number
+    districtId?: number | null
+    topN?: number
+    windowMonths?: number
+  }
+): Promise<CourseAlignmentResponse> {
+  const searchParams = new URLSearchParams()
+  searchParams.set("role", String(params.roleId))
+  if (params.districtId != null) {
+    searchParams.set("district", String(params.districtId))
+  }
+  if (params.topN != null) {
+    searchParams.set("topN", String(params.topN))
+  }
+  if (params.windowMonths != null) {
+    searchParams.set("windowMonths", String(params.windowMonths))
+  }
+  const query = searchParams.toString()
+  const url = `${BACKEND_URL}/api/courses/${courseId}/alignment${
+    query ? `?${query}` : ""
+  }`
+  const res = await fetch(url, { cache: "no-store" })
+  if (!res.ok) {
+    throw new Error(
+      `Course alignment for course ${courseId} failed with status ${res.status}`
+    )
+  }
+  return res.json()
+}
+
+export async function fetchFlags(params?: {
+  districtId?: number | null
+  minOpenings?: number
+}): Promise<FlagsResponse> {
+  const searchParams = new URLSearchParams()
+  if (params?.districtId != null) {
+    searchParams.set("district", String(params.districtId))
+  }
+  if (params?.minOpenings != null) {
+    searchParams.set("minOpenings", String(params.minOpenings))
+  }
+  const query = searchParams.toString()
+  const url = `${BACKEND_URL}/api/flags${query ? `?${query}` : ""}`
+  const res = await fetch(url, { cache: "no-store" })
+  if (!res.ok) {
+    throw new Error(`Flags failed with status ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchSkillGaps(): Promise<SkillGapItem[]> {
+  const res = await fetch(`${BACKEND_URL}/api/alignment/gaps`, {
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    throw new Error(`Skill gaps failed with status ${res.status}`)
+  }
+  return res.json()
+}
