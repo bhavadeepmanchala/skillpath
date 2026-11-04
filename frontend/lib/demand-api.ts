@@ -108,12 +108,16 @@ export async function fetchDemandSummary(): Promise<DemandSummary> {
 }
 
 export async function fetchTopSkills(params?: {
+  roleId?: number | null
   districtId?: number | null
   from?: string
   to?: string
   limit?: number
 }): Promise<DemandSkillsResponse> {
   const searchParams = new URLSearchParams()
+  if (params?.roleId != null) {
+    searchParams.set("role", String(params.roleId))
+  }
   if (params?.districtId != null) {
     searchParams.set("district", String(params.districtId))
   }
