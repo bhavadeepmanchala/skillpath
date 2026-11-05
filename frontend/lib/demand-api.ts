@@ -290,6 +290,21 @@ export interface SkillGapItem {
   gap_score: number
 }
 
+export interface SkillItem {
+  id: number
+  name: string
+  category: string
+  aliases: string[]
+}
+
+export async function fetchSkills(): Promise<SkillItem[]> {
+  const res = await fetch(`${BACKEND_URL}/api/skills`, { cache: "no-store" })
+  if (!res.ok) {
+    throw new Error(`Skills failed with status ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function fetchRoles(): Promise<RoleItem[]> {
   const res = await fetch(`${BACKEND_URL}/api/roles`, { cache: "no-store" })
   if (!res.ok) {
