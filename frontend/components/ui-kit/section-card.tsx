@@ -12,6 +12,7 @@ export interface SectionCardProps {
   onViewModeChange?: (mode: "chart" | "table") => void
   children: React.ReactNode
   className?: string
+  staggerIndex?: number
 }
 
 export function SectionCard({
@@ -23,18 +24,20 @@ export function SectionCard({
   onViewModeChange,
   children,
   className = "",
+  staggerIndex = 0,
 }: SectionCardProps) {
   return (
     <div
-      className={`rounded-lg border border-border bg-card text-card-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)] ${className}`}
+      style={{ animationDelay: `${staggerIndex * 40}ms` }}
+      className={`animate-card-enter rounded-lg border border-border bg-card text-card-foreground shadow-resting ${className}`}
     >
-      <div className="flex flex-col gap-2 p-5 pb-4 border-b border-border/60 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 p-5 pb-4 border-b border-border sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight text-foreground">
+          <h2 className="text-base font-semibold leading-6 tracking-tight text-foreground">
             {title}
           </h2>
           {subtitle && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+            <p className="mt-0.5 text-xs font-normal leading-4 text-muted-foreground">{subtitle}</p>
           )}
         </div>
 
@@ -49,9 +52,9 @@ export function SectionCard({
                 type="button"
                 onClick={() => onViewModeChange("chart")}
                 aria-pressed={viewMode === "chart"}
-                className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   viewMode === "chart"
-                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    ? "bg-card text-foreground shadow-resting font-semibold"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -62,9 +65,9 @@ export function SectionCard({
                 type="button"
                 onClick={() => onViewModeChange("table")}
                 aria-pressed={viewMode === "table"}
-                className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   viewMode === "table"
-                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    ? "bg-card text-foreground shadow-resting font-semibold"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -82,4 +85,3 @@ export function SectionCard({
     </div>
   )
 }
-

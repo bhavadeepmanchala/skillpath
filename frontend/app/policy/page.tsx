@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import {
   Briefcase,
-  Sparkles,
+  Layers,
   Users,
   MapPin,
   GraduationCap,
@@ -21,6 +21,7 @@ import {
   YAxis,
   Tooltip,
   Cell,
+  CartesianGrid,
 } from "recharts"
 import {
   fetchDemandSummary,
@@ -41,6 +42,7 @@ import {
   ChartTooltip,
   ChartSkeleton,
   TableSkeleton,
+  useChartAnimation,
 } from "@/components/ui-kit"
 
 export default function PolicyOverviewPage() {
@@ -106,6 +108,8 @@ export default function PolicyOverviewPage() {
     loadDistricts()
   }, [loadSummary, loadTrends, loadDistricts])
 
+  const isChartAnimationActive = useChartAnimation()
+
   const maxRisingChange = Math.max(
     ...(trends?.rising.map((r) => Math.abs(r.change)) || [0.01]),
     0.01
@@ -116,7 +120,7 @@ export default function PolicyOverviewPage() {
   )
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 animate-page-enter">
       <PageHeader
         title="Policy Intelligence Overview"
         description="High-level workforce demand signals, macro skill trajectories, and geographic concentrations across monitored regions."
@@ -143,36 +147,42 @@ export default function PolicyOverviewPage() {
             rawValue={summary.totalPostings}
             footnote="Aggregated across all cohorts"
             icon={Briefcase}
+            staggerIndex={0}
           />
           <KpiCard
             label="Skills Tracked"
             rawValue={summary.totalSkills}
             footnote="Unique taxonomy skills"
-            icon={Sparkles}
+            icon={Layers}
+            staggerIndex={1}
           />
           <KpiCard
             label="Roles"
             rawValue={summary.totalRoles}
             footnote="Target occupation profiles"
             icon={Users}
+            staggerIndex={2}
           />
           <KpiCard
             label="Districts"
             rawValue={summary.totalDistricts}
             footnote="Reporting geographic areas"
             icon={MapPin}
+            staggerIndex={3}
           />
           <KpiCard
             label="Courses"
             rawValue={summary.totalCourses}
             footnote="Curriculum supply items"
             icon={GraduationCap}
+            staggerIndex={4}
           />
           <KpiCard
             label={`Postings in ${summary.latestMonth}`}
             rawValue={summary.latestMonthPostings}
             footnote="Latest monthly cohort"
             icon={Calendar}
+            staggerIndex={5}
           />
         </div>
       ) : null}
@@ -317,6 +327,7 @@ export default function PolicyOverviewPage() {
                 layout="vertical"
                 margin={{ top: 5, right: 30, left: 70, bottom: 5 }}
               >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" opacity={0.6} />
                 <XAxis
                   type="number"
                   tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
@@ -344,6 +355,9 @@ export default function PolicyOverviewPage() {
                   fill="var(--primary)"
                   radius={[0, 4, 4, 0]}
                   barSize={18}
+                  isAnimationActive={isChartAnimationActive}
+                  animationDuration={550}
+                  animationEasing="ease-out"
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -352,20 +366,20 @@ export default function PolicyOverviewPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-border/60 text-muted-foreground">
-                  <th className="py-2 pr-4 font-medium">Rank</th>
-                  <th className="py-2 px-4 font-medium">District</th>
-                  <th className="py-2 px-4 font-medium">State</th>
-                  <th className="py-2 pl-4 text-right font-medium">Postings</th>
+                <tr className="sticky top-0 bg-card border-b border-border text-muted-foreground z-10">
+                  <th className="py-2.5 pr-4 font-medium">Rank</th>
+                  <th className="py-2.5 px-4 font-medium">District</th>
+                  <th className="py-2.5 px-4 font-medium">State</th>
+                  <th className="py-2.5 pl-4 text-right font-medium">Postings</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/40">
+              <tbody className="divide-y divide-border">
                 {districts.map((d, i) => (
-                  <tr key={d.districtId} className="hover:bg-muted/30">
+                  <tr key={d.districtId} className="hover:bg-muted/50 transition-colors duration-120">
                     <td className="py-2.5 pr-4 font-mono font-medium text-muted-foreground">{i + 1}</td>
                     <td className="py-2.5 px-4 font-medium text-foreground">{d.name}</td>
                     <td className="py-2.5 px-4 text-muted-foreground">{d.state}</td>
-                    <td className="py-2.5 pl-4 text-right font-mono font-medium text-foreground">
+                    <td className="py-2.5 pl-4 text-right font-mono font-medium text-foreground tabular-nums">
                       {d.postings.toLocaleString()}
                     </td>
                   </tr>

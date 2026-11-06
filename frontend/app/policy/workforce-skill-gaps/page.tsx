@@ -41,6 +41,8 @@ import {
   ErrorState,
   EmptyState,
   LowSampleBadge,
+  ProgressBar,
+  Skeleton,
 } from "@/components/ui-kit"
 
 export default function WorkforceSkillGapsPage() {
@@ -357,7 +359,7 @@ export default function WorkforceSkillGapsPage() {
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-enter">
       {/* Page Header */}
       <PageHeader
         title="Skill Gap Explorer"
@@ -370,12 +372,12 @@ export default function WorkforceSkillGapsPage() {
       />
 
       {/* Honesty Notice Banner */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-sky-200 bg-sky-50/70 p-3 text-xs text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-sky-300/60 bg-sky-50/70 p-3 text-xs text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200 shadow-resting">
         <div className="flex items-center gap-1.5 font-medium">
-          <Info className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+          <Info className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
           <span>Coverage ignores the taught level of a skill</span>
         </div>
-        <span className="text-sky-300 dark:text-sky-700 hidden sm:inline">•</span>
+        <span className="text-sky-400 dark:text-sky-700 hidden sm:inline">•</span>
         <div className="text-muted-foreground dark:text-sky-300/80">
           All data is synthetic and deterministic.
         </div>
@@ -384,8 +386,8 @@ export default function WorkforceSkillGapsPage() {
       {/* Filter Bar: Role & District */}
       <FilterBar onReset={handleResetFilters} isFiltered={isFiltered}>
         {rolesLoading ? (
-          <div className="text-xs text-muted-foreground animate-pulse py-1.5">
-            Loading roles...
+          <div className="flex items-center gap-2 py-1.5">
+            <Skeleton className="h-4 w-28" />
           </div>
         ) : rolesError ? (
           <div className="flex items-center gap-2 text-xs text-destructive">
@@ -481,7 +483,15 @@ export default function WorkforceSkillGapsPage() {
                     <tr
                       key={item.courseId}
                       onClick={() => openCourseDrawer(item)}
-                      className={`cursor-pointer transition-colors hover:bg-muted/40 ${
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          openCourseDrawer(item)
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      className={`cursor-pointer transition-colors duration-120 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                         isUnlinked ? "opacity-60 bg-muted/10" : ""
                       }`}
                     >
@@ -508,12 +518,12 @@ export default function WorkforceSkillGapsPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className={`h-full rounded-full transition-all ${barColor}`}
-                              style={{ width: `${Math.min(100, Math.max(2, scorePct))}%` }}
-                            />
-                          </div>
+                          <ProgressBar
+                            value={scorePct}
+                            className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
+                            barClassName={`h-full rounded-full ${barColor}`}
+                            label={`${item.courseName} coverage score`}
+                          />
                           <span className="w-12 text-right font-mono text-xs font-semibold tabular-nums text-foreground">
                             {scorePct}%
                           </span>
@@ -624,7 +634,15 @@ export default function WorkforceSkillGapsPage() {
                       <tr
                         key={`${item.courseId}_${item.districtId}`}
                         onClick={() => openFlagDrawer(item)}
-                        className={`cursor-pointer transition-colors hover:bg-muted/40 ${
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            openFlagDrawer(item)
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        className={`cursor-pointer transition-colors duration-120 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                           isMuted ? "opacity-60 text-muted-foreground" : ""
                         }`}
                       >
@@ -758,12 +776,12 @@ export default function WorkforceSkillGapsPage() {
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className="h-full rounded-full bg-primary"
-                                style={{ width: `${barWidthPct}%` }}
-                              />
-                            </div>
+                            <ProgressBar
+                              value={barWidthPct}
+                              className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
+                              barClassName="h-full rounded-full bg-primary"
+                              label={`${item.name} gap score`}
+                            />
                             <span className="w-10 text-right font-mono text-xs font-semibold tabular-nums text-foreground">
                               {item.gap_score.toFixed(2)}
                             </span>

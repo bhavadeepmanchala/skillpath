@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import {
-  Sparkles,
   CheckCircle2,
   Circle,
   RotateCcw,
@@ -26,6 +25,7 @@ import {
   EmptyState,
   Skeleton,
   TableSkeleton,
+  ProgressBar,
 } from "@/components/ui-kit"
 
 import {
@@ -408,7 +408,7 @@ export default function CareerNavigatorPage() {
   }, [roles])
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-page-enter">
       {/* Header with Title and Synthetic Data Badge */}
       <PageHeader
         title="Career Navigator"
@@ -597,14 +597,12 @@ export default function CareerNavigatorPage() {
                   </div>
 
                   {/* Progress bar */}
-                  <div className="mt-3 h-2 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bg-teal-600 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.min(100, Math.max(0, readinessPct))}%`,
-                      }}
-                    />
-                  </div>
+                  <ProgressBar
+                    value={readinessPct}
+                    className="mt-3 h-2 w-full rounded-full bg-muted overflow-hidden"
+                    barClassName="h-full bg-teal-600 rounded-full"
+                    label="Readiness percentage"
+                  />
 
                   <p className="mt-3 text-xs text-muted-foreground font-mono leading-relaxed">
                     (sum of demand share of ticked skills) / (sum of demand
@@ -760,7 +758,16 @@ export default function CareerNavigatorPage() {
                       setSelectedAlignment(alignment)
                       setIsDrawerOpen(true)
                     }}
-                    className="py-3.5 px-3 -mx-3 rounded-lg hover:bg-muted/40 cursor-pointer transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        setSelectedAlignment(alignment)
+                        setIsDrawerOpen(true)
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    className="py-3.5 px-3 -mx-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors duration-120 flex flex-col md:flex-row md:items-center md:justify-between gap-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   >
                     <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -787,17 +794,12 @@ export default function CareerNavigatorPage() {
                     <div className="flex items-center gap-4 shrink-0 justify-between md:justify-end">
                       <div className="text-right min-w-32">
                         <div className="flex items-center gap-2 justify-end">
-                          <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className="h-full bg-teal-600 rounded-full"
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  Math.max(0, coverageScore)
-                                )}%`,
-                              }}
-                            />
-                          </div>
+                          <ProgressBar
+                            value={coverageScore}
+                            className="w-24 h-2 rounded-full bg-muted overflow-hidden"
+                            barClassName="h-full bg-teal-600 rounded-full"
+                            label={`${alignment.courseName} coverage score`}
+                          />
                           <span className="font-mono text-xs font-semibold tabular-nums text-foreground">
                             {coverageScore.toFixed(1)}%
                           </span>

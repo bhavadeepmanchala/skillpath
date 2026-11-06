@@ -144,7 +144,7 @@ export default function DescribeMyselfPage() {
   }, [roles])
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 pb-12">
+    <div className="mx-auto max-w-4xl space-y-6 pb-12 animate-page-enter">
       <PageHeader
         title="Skill Profile"
         description="Select your target career role and the skills you already possess to evaluate your readiness against employer demand."

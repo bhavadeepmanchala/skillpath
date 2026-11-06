@@ -9,4 +9,4 @@ export * from "./filter-bar"
 export * from "./chart-tooltip"
 export * from "./drawer"
 export * from "./motion-hooks"
-
+export * from "./progress-bar"

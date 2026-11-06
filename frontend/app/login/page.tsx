@@ -141,8 +141,8 @@ function LoginForm() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-12 sm:py-16">
-      <div className="rounded-xl border border-border/80 bg-card p-6 sm:p-8 shadow-xs">
+    <div className="mx-auto w-full max-w-md px-4 py-12 sm:py-16 animate-page-enter">
+      <div className="rounded-xl border border-border bg-card p-6 sm:p-8 shadow-resting">
         <div className="text-center">
           <Link
             href="/"
@@ -151,7 +151,7 @@ function LoginForm() {
             <Compass className="h-4 w-4" />
             SkillPath Demo
           </Link>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground leading-7">
             Sign in to SkillPath
           </h1>
         </div>
@@ -161,7 +161,7 @@ function LoginForm() {
           <div
             role="tablist"
             aria-label="User role selection"
-            className="grid grid-cols-2 rounded-lg border border-border/80 bg-muted/30 p-1"
+            className="grid grid-cols-2 rounded-lg border border-border bg-muted/30 p-1"
           >
             <button
               ref={studentTabRef}
@@ -172,9 +172,9 @@ function LoginForm() {
               tabIndex={activeRole === "student" ? 0 : -1}
               onClick={() => handleRoleChange("student")}
               onKeyDown={(e) => handleKeyDownTab(e, "student")}
-              className={`rounded-md py-2 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              className={`rounded-md py-2 text-xs font-semibold transition-all duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 activeRole === "student"
-                  ? "bg-background text-foreground shadow-xs"
+                  ? "bg-background text-foreground shadow-resting"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -189,9 +189,9 @@ function LoginForm() {
               tabIndex={activeRole === "policymaker" ? 0 : -1}
               onClick={() => handleRoleChange("policymaker")}
               onKeyDown={(e) => handleKeyDownTab(e, "policymaker")}
-              className={`rounded-md py-2 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              className={`rounded-md py-2 text-xs font-semibold transition-all duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 activeRole === "policymaker"
-                  ? "bg-background text-foreground shadow-xs"
+                  ? "bg-background text-foreground shadow-resting"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -235,8 +235,8 @@ function LoginForm() {
                 }}
                 aria-invalid={!!emailError}
                 aria-describedby={emailError ? "email-error" : undefined}
-                className={`w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                  emailError ? "border-destructive focus-visible:ring-destructive" : "border-border/80"
+                className={`w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-resting placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  emailError ? "border-destructive focus-visible:ring-destructive" : "border-border"
                 }`}
               />
               {emailError && (
@@ -273,8 +273,8 @@ function LoginForm() {
                   }}
                   aria-invalid={!!passwordError}
                   aria-describedby={passwordError ? "password-error" : undefined}
-                  className={`w-full rounded-md border bg-background px-3 py-2 pr-10 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                    passwordError ? "border-destructive focus-visible:ring-destructive" : "border-border/80"
+                  className={`w-full rounded-md border bg-background px-3 py-2 pr-10 text-sm text-foreground shadow-resting placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    passwordError ? "border-destructive focus-visible:ring-destructive" : "border-border"
                   }`}
                 />
                 <button
@@ -301,7 +301,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-resting transition-colors duration-120 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 active:translate-y-[1px]"
             >
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -317,7 +317,7 @@ function LoginForm() {
               type="button"
               disabled={isSubmitting}
               onClick={handleDemoLogin}
-              className="w-full inline-flex items-center justify-center rounded-md border border-border/80 bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center rounded-md border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-resting transition-colors duration-120 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 active:translate-y-[1px]"
             >
               {activeRole === "policymaker"
                 ? "Continue as demo policymaker"
@@ -326,7 +326,7 @@ function LoginForm() {
           </form>
 
           {/* Honest Demo Notice */}
-          <p className="mt-5 text-center text-xs text-muted-foreground leading-relaxed border-t border-border/60 pt-4">
+          <p className="mt-5 text-center text-xs text-muted-foreground leading-relaxed border-t border-border pt-4">
             Demo environment: there are no real accounts. Any valid-looking email and password will work. Nothing is sent to a server.
           </p>
         </div>

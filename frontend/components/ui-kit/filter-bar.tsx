@@ -16,7 +16,7 @@ export function FilterBar({
 }: FilterBarProps) {
   return (
     <div
-      className={`flex flex-wrap items-center gap-3 rounded-lg border border-border/80 bg-card p-3 text-card-foreground shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${className}`}
+      className={`flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3 text-card-foreground shadow-resting ${className}`}
     >
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mr-1">
         <Filter className="h-3.5 w-3.5" aria-hidden="true" />
@@ -29,7 +29,7 @@ export function FilterBar({
         <button
           type="button"
           onClick={onReset}
-          className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded px-1 transition-colors duration-120 active:translate-y-[1px]"
         >
           Reset
         </button>
@@ -67,7 +67,7 @@ export function SelectField({
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+        className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground shadow-resting focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 transition-colors duration-120"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -78,4 +78,3 @@ export function SelectField({
     </div>
   )
 }
-

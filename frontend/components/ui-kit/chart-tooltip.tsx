@@ -24,9 +24,9 @@ export function ChartTooltip({
   const title = labelFormatter ? labelFormatter(label || "") : label
 
   return (
-    <div className="rounded-md border border-border/80 bg-popover/95 p-2.5 text-xs text-popover-foreground shadow-md backdrop-blur-xs min-w-[140px]">
+    <div className="rounded-md border border-border bg-popover/95 p-2.5 text-xs text-popover-foreground shadow-raised backdrop-blur-xs min-w-[140px]">
       {title && (
-        <div className="font-semibold text-foreground mb-1.5 pb-1 border-b border-border/60">
+        <div className="font-semibold text-foreground mb-1.5 pb-1 border-b border-border">
           {title}
         </div>
       )}
@@ -55,4 +55,3 @@ export function ChartTooltip({
     </div>
   )
 }
-

@@ -38,6 +38,8 @@ import {
   ChartTooltip,
   ChartSkeleton,
   TableSkeleton,
+  Skeleton,
+  useChartAnimation,
 } from "@/components/ui-kit"
 
 interface ActiveDrawerDistrict {
@@ -194,8 +196,10 @@ export default function GeographicInsightsPage() {
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
   }, [filteredDistricts])
 
+  const isChartAnimationActive = useChartAnimation()
+
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 animate-page-enter">
       <PageHeader
         title="Geographic Insights"
         description="Spatial distribution of hiring demand across 40 monitored districts in 16 states, highlighting regional talent demand hubs."
@@ -284,7 +288,7 @@ export default function GeographicInsightsPage() {
         {districtsLoading ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 md:grid-cols-6 py-4">
             {Array.from({ length: 18 }).map((_, i) => (
-              <div key={i} className="h-16 rounded-md bg-muted/60 animate-pulse" />
+              <Skeleton key={i} className="h-16 w-full rounded-md" />
             ))}
           </div>
         ) : districtsError ? (
@@ -387,6 +391,9 @@ export default function GeographicInsightsPage() {
                     fill="var(--primary)"
                     radius={[0, 3, 3, 0]}
                     barSize={14}
+                    isAnimationActive={isChartAnimationActive}
+                    animationDuration={550}
+                    animationEasing="ease-out"
                     onClick={(data: unknown) => {
                       const record = data as { payload?: { districtId?: number; name?: string }; districtId?: number; name?: string } | undefined
                       const payload = record?.payload || record
@@ -414,24 +421,32 @@ export default function GeographicInsightsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs" aria-label="District postings table">
               <thead>
-                <tr className="border-b border-border/60 text-muted-foreground">
+                <tr className="sticky top-0 bg-card border-b border-border text-muted-foreground z-10">
                   <th className="py-2.5 pr-3 font-medium">Rank</th>
                   <th className="py-2.5 px-3 font-medium">District</th>
                   <th className="py-2.5 px-3 font-medium">State</th>
                   <th className="py-2.5 pl-3 text-right font-medium">Postings</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/40">
+              <tbody className="divide-y divide-border">
                 {filteredDistricts.map((d, index) => (
                   <tr
                     key={d.districtId}
                     onClick={() => openDistrictDrawer(d.districtId, d.name)}
-                    className="cursor-pointer hover:bg-muted/40 transition-colors"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        openDistrictDrawer(d.districtId, d.name)
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
-                    <td className="py-2 pr-3 font-mono font-medium text-muted-foreground">{index + 1}</td>
-                    <td className="py-2 px-3 font-semibold text-foreground">{d.name}</td>
-                    <td className="py-2 px-3 text-muted-foreground">{d.state}</td>
-                    <td className="py-2 pl-3 text-right font-mono font-semibold tabular-nums text-foreground">
+                    <td className="py-2.5 pr-3 font-mono font-medium text-muted-foreground">{index + 1}</td>
+                    <td className="py-2.5 px-3 font-semibold text-foreground">{d.name}</td>
+                    <td className="py-2.5 px-3 text-muted-foreground">{d.state}</td>
+                    <td className="py-2.5 pl-3 text-right font-mono font-semibold tabular-nums text-foreground">
                       {d.postings.toLocaleString()}
                     </td>
                   </tr>

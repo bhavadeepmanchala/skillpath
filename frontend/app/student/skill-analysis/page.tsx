@@ -29,6 +29,7 @@ import {
   EmptyState,
   DeltaBadge,
   LowSampleBadge,
+  ProgressBar,
 } from "@/components/ui-kit"
 import {
   fetchRoles,
@@ -462,7 +463,7 @@ function SkillAnalysisContent() {
   }
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-12">
+    <div className="space-y-8 max-w-7xl mx-auto pb-12 animate-page-enter">
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader
@@ -494,7 +495,7 @@ function SkillAnalysisContent() {
         ) : top15.length === 0 ? (
           <EmptyState
             title="No demand data"
-            description="No top skills demand recorded for this role."
+            description="No top skills demand recorded for this role in the synthetic dataset."
           />
         ) : (
           <div className="space-y-4">
@@ -506,6 +507,14 @@ function SkillAnalysisContent() {
                 {coveredTop15.length} of {top15.length} skills covered
               </div>
             </div>
+
+            {/* Readiness progress bar */}
+            <ProgressBar
+              value={readinessPct}
+              className="h-2 w-full rounded-full bg-muted overflow-hidden"
+              barClassName="h-full bg-teal-600 rounded-full"
+              label={`Readiness score for ${currentRole.name}`}
+            />
 
             {/* Formula line */}
             <div className="p-3 rounded-lg border border-border/70 bg-muted/20 text-xs text-muted-foreground font-mono">
@@ -770,14 +779,12 @@ function SkillAnalysisContent() {
                         <span className="font-mono text-xs font-semibold text-foreground">
                           {(a.coverageScore ?? 0).toFixed(1)}% coverage
                         </span>
-                        <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full bg-teal-600 rounded-full"
-                            style={{
-                              width: `${Math.min(100, Math.max(0, a.coverageScore ?? 0))}%`,
-                            }}
-                          />
-                        </div>
+                        <ProgressBar
+                          value={a.coverageScore ?? 0}
+                          className="w-24 h-1.5 rounded-full bg-muted overflow-hidden"
+                          barClassName="h-full bg-teal-600 rounded-full"
+                          label={`${a.courseName} coverage score`}
+                        />
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
@@ -814,7 +821,7 @@ function SkillAnalysisContent() {
           <div className="space-y-3">
             <div className="overflow-x-auto rounded-md border border-border bg-card">
               <table className="w-full text-left text-xs">
-                <thead className="bg-muted/50 border-b border-border text-muted-foreground font-medium">
+                <thead className="sticky top-0 bg-card border-b border-border text-muted-foreground font-medium z-10">
                   <tr>
                     <th className="p-3">Role</th>
                     <th className="p-3">Sector</th>
@@ -822,7 +829,7 @@ function SkillAnalysisContent() {
                     <th className="p-3 text-right">Covered Skills</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/60">
+                <tbody className="divide-y divide-border">
                   {roleFits.map((r) => {
                     const isSelected = String(r.roleId) === roleParam
                     return (
@@ -835,10 +842,23 @@ function SkillAnalysisContent() {
                             )}`
                           )
                         }}
-                        className={`cursor-pointer transition-colors ${
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            router.push(
+                              `/student/skill-analysis?role=${r.roleId}&skills=${encodeURIComponent(
+                                skillsParam || ""
+                              )}`
+                            )
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-selected={isSelected}
+                        className={`cursor-pointer transition-colors duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                           isSelected
                             ? "bg-teal-500/10 font-medium hover:bg-teal-500/15"
-                            : "hover:bg-muted/40"
+                            : "hover:bg-muted/50"
                         }`}
                       >
                         <td className="p-3 text-foreground flex items-center gap-2">

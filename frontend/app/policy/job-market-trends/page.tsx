@@ -43,6 +43,7 @@ import {
   ChartTooltip,
   ChartSkeleton,
   TableSkeleton,
+  useChartAnimation,
 } from "@/components/ui-kit"
 
 interface ActiveDrawerSkill {
@@ -246,8 +247,10 @@ export default function JobMarketTrendsPage() {
     }
   }, [activeTrendItem, drawerTrend])
 
+  const isChartAnimationActive = useChartAnimation()
+
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 animate-page-enter">
       <PageHeader
         title="Job Market Trends"
         description="Shift in employer demand share across window cohorts, separating accelerating competencies from declining requirements."
@@ -339,6 +342,9 @@ export default function JobMarketTrendsPage() {
                     dataKey="changePp"
                     name="Demand Share Delta"
                     radius={[4, 4, 4, 4]}
+                    isAnimationActive={isChartAnimationActive}
+                    animationDuration={550}
+                    animationEasing="ease-out"
                     onClick={(data: unknown) => {
                       const record = data as { payload?: { skillId?: number; name?: string }; skillId?: number; name?: string } | undefined
                       const payload = record?.payload || record
@@ -436,23 +442,31 @@ export default function JobMarketTrendsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs" aria-label="Rising skills table">
                 <thead>
-                  <tr className="border-b border-border/60 text-muted-foreground">
-                    <th className="py-2 pr-2 font-medium">Skill</th>
-                    <th className="py-2 px-2 text-right font-medium">Prev Share</th>
-                    <th className="py-2 px-2 text-right font-medium">Latest Share</th>
-                    <th className="py-2 px-2 text-right font-medium">Change</th>
-                    <th className="py-2 px-2 text-right font-medium hidden sm:table-cell">Growth</th>
-                    <th className="py-2 pl-2 text-right font-medium hidden md:table-cell">Postings</th>
+                  <tr className="sticky top-0 bg-card border-b border-border text-muted-foreground z-10">
+                    <th className="py-2.5 pr-2 font-medium">Skill</th>
+                    <th className="py-2.5 px-2 text-right font-medium">Prev Share</th>
+                    <th className="py-2.5 px-2 text-right font-medium">Latest Share</th>
+                    <th className="py-2.5 px-2 text-right font-medium">Change</th>
+                    <th className="py-2.5 px-2 text-right font-medium hidden sm:table-cell">Growth</th>
+                    <th className="py-2.5 pl-2 text-right font-medium hidden md:table-cell">Postings</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/40">
+                <tbody className="divide-y divide-border">
                   {trends.rising.map((item) => {
                     const lowSample = isLowSample(item.postingsLatest)
                     return (
                       <tr
                         key={item.skillId}
                         onClick={() => openSkillDrawer(item.skillId, item.name)}
-                        className="cursor-pointer hover:bg-muted/40 transition-colors group"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            openSkillDrawer(item.skillId, item.name)
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors duration-120 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
                         <td className="py-2.5 pr-2">
                           <div className="flex flex-col">
@@ -477,7 +491,7 @@ export default function JobMarketTrendsPage() {
                         <td className="py-2.5 px-2 text-right font-mono tabular-nums text-muted-foreground hidden sm:table-cell">
                           {item.relativeGrowth !== null
                             ? `${item.relativeGrowth >= 0 ? "+" : ""}${(item.relativeGrowth * 100).toFixed(1)}%`
-                            : <span className="text-[11px] font-sans font-medium text-emerald-600">new</span>}
+                            : <span className="text-[11px] font-sans font-medium text-emerald-800 dark:text-emerald-300">new</span>}
                         </td>
                         <td className="py-2.5 pl-2 text-right font-mono tabular-nums text-muted-foreground hidden md:table-cell">
                           {item.postingsPrevious} → {item.postingsLatest}
@@ -510,23 +524,31 @@ export default function JobMarketTrendsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs" aria-label="Declining skills table">
                 <thead>
-                  <tr className="border-b border-border/60 text-muted-foreground">
-                    <th className="py-2 pr-2 font-medium">Skill</th>
-                    <th className="py-2 px-2 text-right font-medium">Prev Share</th>
-                    <th className="py-2 px-2 text-right font-medium">Latest Share</th>
-                    <th className="py-2 px-2 text-right font-medium">Change</th>
-                    <th className="py-2 px-2 text-right font-medium hidden sm:table-cell">Growth</th>
-                    <th className="py-2 pl-2 text-right font-medium hidden md:table-cell">Postings</th>
+                  <tr className="sticky top-0 bg-card border-b border-border text-muted-foreground z-10">
+                    <th className="py-2.5 pr-2 font-medium">Skill</th>
+                    <th className="py-2.5 px-2 text-right font-medium">Prev Share</th>
+                    <th className="py-2.5 px-2 text-right font-medium">Latest Share</th>
+                    <th className="py-2.5 px-2 text-right font-medium">Change</th>
+                    <th className="py-2.5 px-2 text-right font-medium hidden sm:table-cell">Growth</th>
+                    <th className="py-2.5 pl-2 text-right font-medium hidden md:table-cell">Postings</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/40">
+                <tbody className="divide-y divide-border">
                   {trends.declining.map((item) => {
                     const lowSample = isLowSample(item.postingsLatest)
                     return (
                       <tr
                         key={item.skillId}
                         onClick={() => openSkillDrawer(item.skillId, item.name)}
-                        className="cursor-pointer hover:bg-muted/40 transition-colors group"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            openSkillDrawer(item.skillId, item.name)
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors duration-120 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
                         <td className="py-2.5 pr-2">
                           <div className="flex flex-col">
@@ -656,12 +678,6 @@ export default function JobMarketTrendsPage() {
                     }))}
                     margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
                   >
-                    <defs>
-                      <linearGradient id="drawerGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.6} />
                     <XAxis
                       dataKey="month"
@@ -687,7 +703,11 @@ export default function JobMarketTrendsPage() {
                       name="Demand Share"
                       stroke="var(--primary)"
                       strokeWidth={2}
-                      fill="url(#drawerGradient)"
+                      fill="var(--primary)"
+                      fillOpacity={0.12}
+                      isAnimationActive={isChartAnimationActive}
+                      animationDuration={550}
+                      animationEasing="ease-out"
                       activeDot={{ r: 4 }}
                     />
                   </AreaChart>

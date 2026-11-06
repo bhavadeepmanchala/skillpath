@@ -75,7 +75,7 @@ export function Navbar() {
           </a>
           <Link
             href={sessionHref || "/login"}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-resting transition-colors duration-120 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:translate-y-[1px]"
           >
             {sessionHref ? "Open dashboard" : "Sign in"}
           </Link>
@@ -87,7 +87,7 @@ export function Navbar() {
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-expanded={mobileOpen}
           aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
-          className="md:hidden rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="md:hidden rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors duration-120"
         >
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
@@ -96,7 +96,7 @@ export function Navbar() {
       {/* Mobile dropdown menu */}
       {mobileOpen && (
         <nav
-          className="md:hidden border-t border-border/70 bg-background px-4 py-4 space-y-3"
+          className="md:hidden border-t border-border bg-background px-4 py-4 space-y-3"
           aria-label="Mobile Navigation"
         >
           <Link
@@ -130,11 +130,11 @@ export function Navbar() {
             <span>GitHub</span>
             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
           </a>
-          <div className="pt-2 border-t border-border/60">
+          <div className="pt-2 border-t border-border">
             <Link
               href={sessionHref || "/login"}
               onClick={() => setMobileOpen(false)}
-              className="flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-resting hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors duration-120 active:translate-y-[1px]"
             >
               {sessionHref ? "Open dashboard" : "Sign in"}
             </Link>

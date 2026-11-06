@@ -39,6 +39,9 @@ import {
   ChartTooltip,
   ChartSkeleton,
   TableSkeleton,
+  Skeleton,
+  ProgressBar,
+  useChartAnimation,
 } from "@/components/ui-kit"
 
 export default function SkillDemandPage() {
@@ -210,8 +213,10 @@ export default function SkillDemandPage() {
     return opts
   }, [districts])
 
+  const isChartAnimationActive = useChartAnimation()
+
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 animate-page-enter">
       <PageHeader
         title="Skill Demand Analysis"
         description="Granular demand distribution across skills, monthly longitudinal trend trajectories, and regional hiring concentrations."
@@ -261,12 +266,12 @@ export default function SkillDemandPage() {
             ) : skillsError ? (
               <ErrorState message={skillsError} onRetry={loadTopSkills} />
             ) : !skillsData || skillsData.skills.length === 0 ? (
-              <EmptyState title="No skills found" description="No skill records available for this geographic scope." />
+              <EmptyState title="No skills found in synthetic catalogue" description="No skill records available for this geographic scope." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs" aria-label="Top skills by demand">
                   <thead>
-                    <tr className="border-b border-border/60 text-muted-foreground">
+                    <tr className="sticky top-0 bg-card border-b border-border text-muted-foreground z-10">
                       <th className="py-2.5 pr-2 font-medium w-8">#</th>
                       <th className="py-2.5 px-3 font-medium">Skill Name</th>
                       <th className="py-2.5 px-3 font-medium hidden sm:table-cell">Category</th>
@@ -274,7 +279,7 @@ export default function SkillDemandPage() {
                       <th className="py-2.5 pl-3 text-right font-medium">Share</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/40">
+                  <tbody className="divide-y divide-border">
                     {skillsData.skills.map((skill, index) => {
                       const isSelected = selectedSkill?.skillId === skill.skillId
                       const isHovered = hoveredSkillId === skill.skillId
@@ -284,20 +289,29 @@ export default function SkillDemandPage() {
                         <tr
                           key={skill.skillId}
                           onClick={() => setSelectedSkill(skill)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault()
+                              setSelectedSkill(skill)
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          aria-selected={isSelected}
                           onMouseEnter={() => setHoveredSkillId(skill.skillId)}
                           onMouseLeave={() => setHoveredSkillId(null)}
-                          className={`cursor-pointer transition-colors ${
+                          className={`cursor-pointer transition-colors duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                             isSelected
                               ? "bg-primary/10 font-medium text-foreground"
                               : isHovered
-                              ? "bg-muted/40 text-foreground"
-                              : "hover:bg-muted/30 text-foreground/90"
+                              ? "bg-muted/50 text-foreground"
+                              : "hover:bg-muted/50 text-foreground/90"
                           }`}
                         >
-                          <td className="py-2 pr-2 font-mono text-[11px] text-muted-foreground">
+                          <td className="py-2.5 pr-2 font-mono text-[11px] text-muted-foreground">
                             {index + 1}
                           </td>
-                          <td className="py-2 px-3">
+                          <td className="py-2.5 px-3">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-foreground">{skill.name}</span>
                               {isSelected && (
@@ -307,13 +321,13 @@ export default function SkillDemandPage() {
                               )}
                             </div>
                           </td>
-                          <td className="py-2 px-3 text-muted-foreground hidden sm:table-cell">
+                          <td className="py-2.5 px-3 text-muted-foreground hidden sm:table-cell">
                             {skill.category}
                           </td>
-                          <td className="py-2 px-3 text-right font-mono tabular-nums text-foreground">
+                          <td className="py-2.5 px-3 text-right font-mono tabular-nums text-foreground">
                             {skill.postingsWithSkill.toLocaleString()}
                           </td>
-                          <td className="py-2 pl-3 text-right font-mono tabular-nums font-semibold text-primary">
+                          <td className="py-2.5 pl-3 text-right font-mono tabular-nums font-semibold text-primary">
                             {sharePercent}%
                           </td>
                         </tr>
@@ -372,12 +386,6 @@ export default function SkillDemandPage() {
                     data={mergedChartPoints}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
-                    <defs>
-                      <linearGradient id="skillAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.6} />
                     <XAxis
                       dataKey="month"
@@ -410,8 +418,11 @@ export default function SkillDemandPage() {
                       name={selectedDistrictId ? "Selected District" : "Demand Share"}
                       stroke="var(--primary)"
                       strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#skillAreaGradient)"
+                      fill="var(--primary)"
+                      fillOpacity={0.12}
+                      isAnimationActive={isChartAnimationActive}
+                      animationDuration={550}
+                      animationEasing="ease-out"
                       activeDot={{ r: 4 }}
                     />
                     {compareAllDistricts && selectedDistrictId && (
@@ -423,6 +434,9 @@ export default function SkillDemandPage() {
                         strokeWidth={2}
                         strokeDasharray="4 4"
                         dot={false}
+                        isAnimationActive={isChartAnimationActive}
+                        animationDuration={550}
+                        animationEasing="ease-out"
                       />
                     )}
                   </AreaChart>
@@ -469,15 +483,15 @@ export default function SkillDemandPage() {
               <div className="space-y-3">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="space-y-1.5">
-                    <div className="h-3 w-32 rounded bg-muted animate-pulse" />
-                    <div className="h-2 w-full rounded bg-muted animate-pulse" />
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-2 w-full" />
                   </div>
                 ))}
               </div>
             ) : districtsError ? (
               <ErrorState message={districtsError} onRetry={loadDistricts} compact />
             ) : top10Districts.length === 0 ? (
-              <EmptyState title="No districts" description="No district data returned." />
+              <EmptyState title="No districts" description="No district data returned from the synthetic database." />
             ) : (
               <div className="space-y-2.5">
                 {top10Districts.map((d, index) => {
@@ -492,15 +506,16 @@ export default function SkillDemandPage() {
                           prev === String(d.districtId) ? "" : String(d.districtId)
                         )
                       }
-                      className={`cursor-pointer rounded-md p-2 transition-colors border ${
+                      className={`cursor-pointer rounded-md p-2 transition-colors duration-120 border ${
                         isSelected
                           ? "border-primary bg-primary/10"
-                          : "border-transparent hover:bg-muted/40"
+                          : "border-transparent hover:bg-muted/50"
                       }`}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
                           setSelectedDistrictId((prev) =>
                             prev === String(d.districtId) ? "" : String(d.districtId)
                           )
@@ -522,14 +537,12 @@ export default function SkillDemandPage() {
                           {d.postings.toLocaleString()}
                         </span>
                       </div>
-                      <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden" aria-hidden="true">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            isSelected ? "bg-primary" : "bg-primary/70"
-                          }`}
-                          style={{ width: `${barPct}%` }}
-                        />
-                      </div>
+                      <ProgressBar
+                        value={barPct}
+                        className="h-1.5 w-full rounded-full bg-muted overflow-hidden"
+                        barClassName={`h-full rounded-full ${isSelected ? "bg-primary" : "bg-primary/70"}`}
+                        label={`${d.name} hiring volume`}
+                      />
                     </div>
                   )
                 })}
