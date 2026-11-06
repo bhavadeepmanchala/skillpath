@@ -15,7 +15,7 @@ export function useAuthGuard(requiredRole: "policymaker" | "student") {
     if (!role || role !== requiredRole) {
       router.replace("/login")
     } else {
-      setUserName(name || (requiredRole === "policymaker" ? "Demo Policymaker" : "Demo Student"))
+      setUserName(name || (requiredRole === "policymaker" ? "Demo policymaker" : "Demo student"))
       setAuthorized(true)
     }
   }, [requiredRole, router])

@@ -9,9 +9,9 @@ const geist = Geist({
 })
 
 export const metadata: Metadata = {
-  title: 'SkillPath — Know your skill gap before the market does',
+  title: 'SkillPath — Skill Demand Alignment Engine',
   description:
-    'SkillPath helps students measure their skill gap against real hiring demand and get a clear path to close it.',
+    'SkillPath compares skills in job postings with what courses teach using explainable alignment scoring on synthetic workforce data.',
   generator: 'v0.app',
   icons: {
     icon: [

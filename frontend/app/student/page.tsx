@@ -480,7 +480,7 @@ export default function CareerNavigatorPage() {
         <div className="lg:col-span-2 space-y-4">
           <SectionCard
             title="Skills this role asks for"
-            subtitle="Top 15 skills requested by employers. Tick the skills you currently possess to compute your readiness."
+            subtitle={`Top ${totalCount} skills requested by employers. Tick the skills you currently possess to compute your readiness.`}
             actionSlot={
               <button
                 type="button"
@@ -608,7 +608,7 @@ export default function CareerNavigatorPage() {
 
                   <p className="mt-3 text-xs text-muted-foreground font-mono leading-relaxed">
                     (sum of demand share of ticked skills) / (sum of demand
-                    share of all 15 listed skills) &times; 100
+                    share of all {totalCount} listed skills) &times; 100
                   </p>
                 </div>
 
@@ -620,12 +620,14 @@ export default function CareerNavigatorPage() {
                 </div>
 
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Ticked demand share</span>
+                  <span>Demand-share points</span>
                   <span className="font-mono text-foreground">
-                    {(tickedShare * 100).toFixed(1)}% /{" "}
-                    {(totalShare * 100).toFixed(1)}%
+                    {(tickedShare * 100).toFixed(1)} of {(totalShare * 100).toFixed(1)}
                   </span>
                 </div>
+                <p className="text-[11px] text-muted-foreground leading-normal">
+                  One posting can list many skills, so shares across skills add up to more than 100%.
+                </p>
               </div>
             )}
           </SectionCard>
@@ -646,7 +648,7 @@ export default function CareerNavigatorPage() {
           />
         ) : untickedSkills.length === 0 ? (
           <EmptyState
-            title="All 15 skills ticked"
+            title={totalCount > 0 ? `All ${totalCount} skills ticked` : "All skills ticked"}
             description="You have marked all top employer skills for this role! Explore courses below to reinforce or validate your competencies."
             icon={CheckCircle2}
           />

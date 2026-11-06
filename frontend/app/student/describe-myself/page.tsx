@@ -146,8 +146,8 @@ export default function DescribeMyselfPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-12">
       <PageHeader
-        title="Describe Myself"
-        description="Select your target career role and the skills you already possess to evaluate your readiness against real market demand."
+        title="Skill Profile"
+        description="Select your target career role and the skills you already possess to evaluate your readiness against employer demand."
         showSyntheticBadge={true}
       />
 

@@ -13,8 +13,8 @@ import {
 import { useAuthGuard } from "@/lib/auth"
 
 const navItems = [
-  { name: "Dashboard", href: "/student", icon: LayoutDashboard },
-  { name: "Describe Myself", href: "/student/describe-myself", icon: UserCheck },
+  { name: "Career Navigator", href: "/student", icon: LayoutDashboard },
+  { name: "Skill Profile", href: "/student/describe-myself", icon: UserCheck },
   { name: "Skill Analysis", href: "/student/skill-analysis", icon: Sparkles },
 ]
 

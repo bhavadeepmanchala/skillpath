@@ -53,6 +53,7 @@ interface RoleFitItem {
   sector: string
   readinessPct: number
   coveredCount: number
+  totalCount: number
   status: "ok" | "error"
 }
 
@@ -262,6 +263,7 @@ function SkillAnalysisContent() {
               sector: r.sector,
               readinessPct: readiness,
               coveredCount: covered.length,
+              totalCount: t15.length,
               status: "ok" as const,
             }
           } catch {
@@ -271,6 +273,7 @@ function SkillAnalysisContent() {
               sector: r.sector,
               readinessPct: 0,
               coveredCount: 0,
+              totalCount: 0,
               status: "error" as const,
             }
           }
@@ -450,7 +453,7 @@ function SkillAnalysisContent() {
               nativeButton={false}
               className="bg-teal-600 hover:bg-teal-700 text-white"
             >
-              <ArrowLeft className="mr-2 h-4 w-4" /> Go to Describe Myself
+              <ArrowLeft className="mr-2 h-4 w-4" /> Go to Skill Profile
             </Button>
           </div>
         </SectionCard>
@@ -500,17 +503,17 @@ function SkillAnalysisContent() {
                 {readinessPct.toFixed(1)}%
               </div>
               <div className="text-sm text-foreground font-medium">
-                {coveredTop15.length} of 15 skills covered
+                {coveredTop15.length} of {top15.length} skills covered
               </div>
             </div>
 
             {/* Formula line */}
             <div className="p-3 rounded-lg border border-border/70 bg-muted/20 text-xs text-muted-foreground font-mono">
-              Formula: (Covered Top-15 Demand Share: {(coveredTop15Share * 100).toFixed(1)}% / Total Top-15 Demand Share: {(totalTop15Share * 100).toFixed(1)}%) × 100 = {readinessPct.toFixed(1)}%
+              Formula: (Covered Top-{top15.length} Demand Share: {(coveredTop15Share * 100).toFixed(1)}% / Total Top-{top15.length} Demand Share: {(totalTop15Share * 100).toFixed(1)}%) × 100 = {readinessPct.toFixed(1)}%
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Based on top 15 skills demanded in job postings for {currentRole.name}. 0% is an accurate assessment when none of the top 15 demanded skills are selected.
+              Based on top {top15.length} skills demanded in job postings for {currentRole.name}. 0% is an accurate assessment when none of the top {top15.length} demanded skills are selected.
             </p>
           </div>
         )}
@@ -519,7 +522,7 @@ function SkillAnalysisContent() {
       {/* SECTION 2: Skills you have and Missing skills */}
       <SectionCard
         title="2. Skills Breakdown"
-        subtitle={`Skills you possess vs missing skills among the top 15 demand for ${currentRole.name}.`}
+        subtitle={`Skills you possess vs missing skills among the top ${top15.length} demand for ${currentRole.name}.`}
       >
         {roleDataLoading ? (
           <div className="grid gap-6 md:grid-cols-2">
@@ -543,13 +546,13 @@ function SkillAnalysisContent() {
                     Skills you have ({coveredTop15.length})
                   </h3>
                   <span className="text-[11px] text-muted-foreground font-mono">
-                    Top-15 Demand
+                    Top-{top15.length} Demand
                   </span>
                 </div>
 
                 {coveredTop15.length === 0 ? (
                   <p className="text-xs text-muted-foreground italic py-4 text-center">
-                    You have not selected any of the top 15 skills for this role.
+                    You have not selected any of the top {top15.length} skills for this role.
                   </p>
                 ) : (
                   <div className="divide-y divide-border/60">
@@ -586,7 +589,7 @@ function SkillAnalysisContent() {
 
                 {missingTop15.length === 0 ? (
                   <p className="text-xs text-teal-600 dark:text-teal-400 font-medium py-4 text-center">
-                    Great job! You have covered all top 15 skills for this role.
+                    Great job! You have covered all top ${top15.length} skills for this role.
                   </p>
                 ) : (
                   <div className="divide-y divide-border/60">
@@ -624,10 +627,10 @@ function SkillAnalysisContent() {
             {otherSelectedSkills.length > 0 && (
               <div className="rounded-lg border border-border/80 bg-muted/15 p-4 space-y-2">
                 <h3 className="text-xs font-semibold text-foreground">
-                  Other skills you listed that are not in this role&apos;s top 15:
+                  Other skills you listed that are not in this role&apos;s top {top15.length}:
                 </h3>
                 <p className="text-[11px] text-muted-foreground">
-                  These skills are not among the top 15 most demanded in job postings for {currentRole.name}. They are preserved here and not dropped:
+                  These skills are not among the top {top15.length} most demanded in job postings for {currentRole.name}. They are preserved here and not dropped:
                 </p>
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {otherSelectedSkills.map((s) => (
@@ -661,7 +664,7 @@ function SkillAnalysisContent() {
         ) : whatToLearnNext.length === 0 ? (
           <EmptyState
             title="No skill gaps!"
-            description="You have already acquired all top 15 skills demanded for this role."
+            description={`You have already acquired all top ${top15.length} skills demanded for this role.`}
           />
         ) : (
           <div className="space-y-3">
@@ -816,7 +819,7 @@ function SkillAnalysisContent() {
                     <th className="p-3">Role</th>
                     <th className="p-3">Sector</th>
                     <th className="p-3 text-right">Readiness %</th>
-                    <th className="p-3 text-right">Covered Top 15</th>
+                    <th className="p-3 text-right">Covered Skills</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -861,7 +864,7 @@ function SkillAnalysisContent() {
                         </td>
                         <td className="p-3 text-right font-mono text-muted-foreground tabular-nums">
                           {r.status === "ok" ? (
-                            `${r.coveredCount} / 15`
+                            `${r.coveredCount} / ${r.totalCount}`
                           ) : (
                             <span className="text-destructive">—</span>
                           )}
@@ -873,7 +876,7 @@ function SkillAnalysisContent() {
               </table>
             </div>
             <p className="text-[11px] text-muted-foreground italic">
-              Share of each role&apos;s top-15 demand that your skills cover. Common soft skills appear in many roles, so scores overlap.
+              Share of each role&apos;s demand that your skills cover. Common soft skills appear in many roles, so scores overlap.
             </p>
           </div>
         )}
