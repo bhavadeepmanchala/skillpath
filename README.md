@@ -210,7 +210,7 @@ cd backend
 .\mvnw.cmd test
 ```
 
-**Results:** 75 tests passing, 0 failures, 0 errors.
+**Results:** 77 tests passing, 0 failures, 0 errors.
 
 **Test Coverage:**
 - REST controllers: parameter parsing, validation exceptions, 400/404 handling.

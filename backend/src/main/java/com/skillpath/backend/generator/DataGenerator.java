@@ -95,23 +95,21 @@ public class DataGenerator {
     }
 
     /**
-     * Loads reference data and synthetic postings into the database in ONE transaction,
+     * Loads reference data and synthetic postings into the database,
      * then rebuilds demand_monthly aggregates.
      * Delegates to {@link #run(long)} using configured properties seed.
      */
-    @Transactional
     public void run() {
         run(properties.getSeed());
     }
 
     /**
-     * Loads reference data and synthetic postings into the database in ONE transaction using
+     * Loads reference data and synthetic postings into the database using
      * the specified seed, then rebuilds demand_monthly.
      * If any of the 7 owned tables is non-empty, throws {@link IllegalStateException}.
      *
      * @param seed master seed for generation
      */
-    @Transactional
     public void run(long seed) {
         long skillCount = queryRowCount("skill");
         long aliasCount = queryRowCount("skill_alias");
@@ -132,6 +130,25 @@ public class DataGenerator {
             ));
         }
 
+        insertGeneratedPostings(seed);
+        System.gc();
+
+        // 7. demand_monthly rebuild
+        demandMonthlyRebuilder.rebuild();
+
+        log.info("Seeded 7 generator tables: skill={}, skill_alias={}, role={}, district={}, job_posting={}, posting_skill={}, demand_monthly={}",
+            queryRowCount("skill"),
+            queryRowCount("skill_alias"),
+            queryRowCount("role"),
+            queryRowCount("district"),
+            queryRowCount("job_posting"),
+            queryRowCount("posting_skill"),
+            queryRowCount("demand_monthly")
+        );
+    }
+
+    @Transactional
+    public void insertGeneratedPostings(long seed) {
         GeneratedDataset dataset = generate(seed);
         ReferenceData refData = dataset.referenceData();
         PostingData postingData = dataset.postingData();
@@ -208,19 +225,6 @@ public class DataGenerator {
                 ps.setLong(2, s.skillId());
                 ps.setString(3, s.requiredLevel());
             }
-        );
-
-        // 7. demand_monthly rebuild
-        demandMonthlyRebuilder.rebuild();
-
-        log.info("Seeded 7 generator tables: skill={}, skill_alias={}, role={}, district={}, job_posting={}, posting_skill={}, demand_monthly={}",
-            queryRowCount("skill"),
-            queryRowCount("skill_alias"),
-            queryRowCount("role"),
-            queryRowCount("district"),
-            queryRowCount("job_posting"),
-            queryRowCount("posting_skill"),
-            queryRowCount("demand_monthly")
         );
     }
 
