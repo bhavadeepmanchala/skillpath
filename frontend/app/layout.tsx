@@ -1,11 +1,17 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { Geist } from 'next/font/google'
 import './globals.css'
 
+const geist = Geist({
+  subsets: ['latin'],
+  variable: '--font-sans',
+})
+
 export const metadata: Metadata = {
-  title: 'SkillPath — Know your skill gap before the market does',
+  title: 'SkillPath — Skill Demand Alignment Engine',
   description:
-    'SkillPath helps students measure their skill gap against real hiring demand and get a clear path to close it.',
+    'SkillPath compares skills in job postings with what courses teach using explainable alignment scoring on synthetic workforce data.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -37,8 +43,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased">
+    <html lang="en" className={geist.variable}>
+      <body className="font-sans antialiased tabular-nums">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
