@@ -126,6 +126,7 @@ Formulas are verified in test suites including `CourseControllerTest`, `DemandCo
 | `GET` | `/api/demand/skills/{id}/trend` | `role`, `district`, `from`, `to` | Monthly historical posting count and share trend points for a specific skill |
 | `GET` | `/api/demand/trends` | `role`, `district`, `window`, `limit` | Top rising and declining skills by momentum change with window date ranges |
 | `GET` | `/api/demand/districts` | `from`, `to` | Postings by district and percentage share of total volume |
+| `GET` | `/api/ready` | None | System readiness status (`ready`, `phase`, `synthetic`) |
 
 ---
 
@@ -210,7 +211,7 @@ cd backend
 .\mvnw.cmd test
 ```
 
-**Results:** 77 tests passing, 0 failures, 0 errors.
+**Results:** 88 tests passing, 0 failures, 0 errors.
 
 **Test Coverage:**
 - REST controllers: parameter parsing, validation exceptions, 400/404 handling.
