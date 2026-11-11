@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react"
 import { useAuthGuard } from "@/lib/auth"
+import { ReadinessProvider } from "@/components/readiness-provider"
 
 const navItems = [
   { name: "Overview", href: "/policy", icon: LayoutDashboard },
@@ -237,9 +238,11 @@ export default function PolicyLayout({
         </header>
 
         {/* Page children - the ONLY scrolling container */}
-        <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto overscroll-contain">
-          {children}
-        </main>
+        <ReadinessProvider>
+          <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto overscroll-contain">
+            {children}
+          </main>
+        </ReadinessProvider>
       </div>
     </div>
   )

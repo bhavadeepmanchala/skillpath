@@ -1,5 +1,6 @@
 package com.skillpath.backend.generator;
 
+import com.skillpath.backend.service.SeedStatus;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import javax.sql.DataSource;
@@ -21,17 +22,20 @@ public class SeedRunner implements ApplicationRunner {
     private final CourseGenerator courseGenerator;
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
+    private final SeedStatus seedStatus;
 
     public SeedRunner(
         DataGenerator dataGenerator,
         CourseGenerator courseGenerator,
         DataSource dataSource,
-        JdbcTemplate jdbcTemplate
+        JdbcTemplate jdbcTemplate,
+        SeedStatus seedStatus
     ) {
         this.dataGenerator = dataGenerator;
         this.courseGenerator = courseGenerator;
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
+        this.seedStatus = seedStatus;
     }
 
     @Override
@@ -57,31 +61,47 @@ public class SeedRunner implements ApplicationRunner {
             log.warn("================================================================================");
         }
 
-        dataGenerator.run();
-        courseGenerator.run();
+        try {
+            if (isDatabasePopulated()) {
+                log.info("Database tables are not empty; skipping synthetic data seeding.");
+                seedStatus.setPhase(SeedStatus.PHASE_READY);
+                return;
+            }
 
-        long skillCount = queryCount("skill");
-        long skillAliasCount = queryCount("skill_alias");
-        long roleCount = queryCount("role");
-        long districtCount = queryCount("district");
-        long jobPostingCount = queryCount("job_posting");
-        long postingSkillCount = queryCount("posting_skill");
-        long courseCount = queryCount("course");
-        long courseSkillCount = queryCount("course_skill");
-        long courseRoleCount = queryCount("course_role");
-        long courseOfferingCount = queryCount("course_offering");
-        long placementOutcomeCount = queryCount("placement_outcome");
-        long employerValidationCount = queryCount("employer_validation");
-        long demandMonthlyCount = queryCount("demand_monthly");
-        long trainingPlanCount = queryCount("training_plan");
+            dataGenerator.run();
+            courseGenerator.run();
 
-        log.info("Seeded row counts for all 14 tables: skill={}, skill_alias={}, role={}, district={}, job_posting={}, posting_skill={}, course={}, course_skill={}, course_role={}, course_offering={}, placement_outcome={}, employer_validation={}, demand_monthly={}, training_plan={}",
-            skillCount, skillAliasCount, roleCount, districtCount, jobPostingCount, postingSkillCount,
-            courseCount, courseSkillCount, courseRoleCount, courseOfferingCount, placementOutcomeCount,
-            employerValidationCount, demandMonthlyCount, trainingPlanCount
-        );
+            long skillCount = queryCount("skill");
+            long skillAliasCount = queryCount("skill_alias");
+            long roleCount = queryCount("role");
+            long districtCount = queryCount("district");
+            long jobPostingCount = queryCount("job_posting");
+            long postingSkillCount = queryCount("posting_skill");
+            long courseCount = queryCount("course");
+            long courseSkillCount = queryCount("course_skill");
+            long courseRoleCount = queryCount("course_role");
+            long courseOfferingCount = queryCount("course_offering");
+            long placementOutcomeCount = queryCount("placement_outcome");
+            long employerValidationCount = queryCount("employer_validation");
+            long demandMonthlyCount = queryCount("demand_monthly");
+            long trainingPlanCount = queryCount("training_plan");
 
-        log.info("Synthetic reference data seeding completed successfully.");
+            log.info("Seeded row counts for all 14 tables: skill={}, skill_alias={}, role={}, district={}, job_posting={}, posting_skill={}, course={}, course_skill={}, course_role={}, course_offering={}, placement_outcome={}, employer_validation={}, demand_monthly={}, training_plan={}",
+                skillCount, skillAliasCount, roleCount, districtCount, jobPostingCount, postingSkillCount,
+                courseCount, courseSkillCount, courseRoleCount, courseOfferingCount, placementOutcomeCount,
+                employerValidationCount, demandMonthlyCount, trainingPlanCount
+            );
+
+            log.info("Synthetic reference data seeding completed successfully.");
+            seedStatus.setPhase(SeedStatus.PHASE_READY);
+        } catch (Throwable t) {
+            log.error("Synthetic data seeding failed", t);
+            seedStatus.setPhase(SeedStatus.PHASE_FAILED);
+        }
+    }
+
+    private boolean isDatabasePopulated() {
+        return queryCount("job_posting") > 0 || queryCount("demand_monthly") > 0;
     }
 
     private long queryCount(String tableName) {
