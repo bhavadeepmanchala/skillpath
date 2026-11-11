@@ -12,6 +12,7 @@ import {
 } from "@/lib/demand-api"
 import { useCountUp } from "@/components/ui-kit/motion-hooks"
 import { Skeleton } from "@/components/ui-kit/skeleton"
+import { ReadinessProvider } from "@/components/readiness-provider"
 
 function CountUpItem({
   label,
@@ -42,7 +43,7 @@ function CountUpItem({
   )
 }
 
-export default function HomePage() {
+function HomePageContent() {
   const [summary, setSummary] = useState<DemandSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [summaryError, setSummaryError] = useState(false)
@@ -448,5 +449,13 @@ Demand share = postings that mention a skill / all postings for the role
         </div>
       </footer>
     </div>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <ReadinessProvider>
+      <HomePageContent />
+    </ReadinessProvider>
   )
 }
