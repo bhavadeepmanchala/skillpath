@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class DataGenerator {
@@ -131,7 +130,6 @@ public class DataGenerator {
         }
 
         insertGeneratedPostings(seed);
-        System.gc();
 
         // 7. demand_monthly rebuild
         demandMonthlyRebuilder.rebuild();
@@ -147,7 +145,6 @@ public class DataGenerator {
         );
     }
 
-    @Transactional
     public void insertGeneratedPostings(long seed) {
         GeneratedDataset dataset = generate(seed);
         ReferenceData refData = dataset.referenceData();
