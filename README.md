@@ -101,13 +101,18 @@ All metrics are deterministic, transparent, and verified through unit tests:
   $$\text{Oversupply Ratio} = \frac{\text{Course Seats}}{\text{Estimated Openings}}$$
 - **Gap Score:** Identifies national training shortfalls combining demand, absence in courses, and growth:
   $$\text{Gap Score} = \text{Demand Share}_{\text{last 3m}} \times (1.0 - \text{Course Coverage}) \times \text{Growth Factor}$$
+- **Recommendations (Add & Retire):** Recommends actionable curriculum updates for a course's linked roles across trailing windows (default 3 months) with minimum posting guard (`skillpath.trends.min-postings=20`):
+  - **Skills to ADD:** Untaught skills with $\text{Demand Share}_{\text{latest}} \ge \text{min-share-for-add}$ (default 0.05). Ranked by:
+    $$\text{Score} = \text{Demand Share}_{\text{latest}} \times (1 + \max(0, \text{Relative Growth}))$$
+    *(Note on formula choice: We use $\text{latestShare} \times (1 + \max(0, \text{relativeGrowth}))$ rather than pure $\text{share} \times \text{trend}$ because a pure product would give a flat high-demand skill with $\text{trend} = 0$ a score of zero, failing to recommend critical stable core skills.)*
+  - **Skills to RETIRE:** Taught skills meeting three concurrent criteria: negative momentum ($\text{Trend} < 0$), significant relative contraction ($\text{Relative Growth} \le -\text{retire-min-decline}$, default 0.10, i.e., at least 10% relative fall), and moderate market presence ($\text{Demand Share}_{\text{latest}} \le \text{retire-max-share}$, default 0.40, preventing still-dominant core skills from retirement). Ranked by relative growth ascending (steepest fall first), then latest demand share ascending, then skill ID.
 
 ### Worked Example: Oversupply Flag
 A course in a district provides 100 seats. Job postings for linked roles in that district total 40 over trailing 12 months with a 1.0 scaling factor ($\text{estimatedOpenings} = 40 \times 1.0 = 40$).
 $$\text{Oversupply Ratio} = \frac{100}{40} = 2.50$$
 Because estimated openings (40) satisfy the minimum threshold ($\ge 20$), `lowSample` is false. With a ratio of 2.50 exceeding the 1.5 threshold, the offering is flagged as `oversupplied = true`.
 
-Formulas are verified in test suites including `CourseControllerTest`, `DemandControllerTest`, `DemandTrendsControllerTest`, `FlagControllerTest`, `AlignmentControllerTest`, and `CoursePatternsIntegrationTest`.
+Formulas are verified in test suites including `CourseControllerTest`, `CourseRecommendationsControllerTest`, `DemandControllerTest`, `DemandTrendsControllerTest`, `FlagControllerTest`, `AlignmentControllerTest`, and `CoursePatternsIntegrationTest`.
 
 ---
 
@@ -119,6 +124,7 @@ Formulas are verified in test suites including `CourseControllerTest`, `DemandCo
 | `GET` | `/api/skills` | None | List of skills (`id`, `name`, `category`, `aliases`) sorted by name |
 | `GET` | `/api/courses` | None | List of courses (`id`, `name`, `sector`, `durationWeeks`, `skillCount`, `linkedRoleCount`) |
 | `GET` | `/api/courses/{id}/alignment` | `role` (required), `district`, `topN`, `windowMonths` | Course coverage score (0–100), postings in scope, covered skills, and missing skills |
+| `GET` | `/api/courses/{id}/recommendations` | `district` | Ranked lists of skills to add and retire for linked roles with shares, trends, relative growth, and add scores |
 | `GET` | `/api/flags` | `district`, `minOpenings` | Course-district oversupply ratios, estimated openings, lowSample flags, and thresholds |
 | `GET` | `/api/alignment/gaps` | None | Top 10 national skill gaps with demand share, course coverage, and growth factors |
 | `GET` | `/api/demand/summary` | None | System KPIs: total postings, skills, roles, districts, courses, and latest month postings |
