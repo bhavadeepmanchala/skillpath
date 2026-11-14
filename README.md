@@ -99,6 +99,10 @@ All metrics are deterministic, transparent, and verified through unit tests:
   $$\text{Course Coverage} = \frac{\sum_{s \in \text{Covered Top-15}} \text{Demand Share}(s)}{\sum_{s \in \text{Top-15}} \text{Demand Share}(s)} \times 100$$
 - **Oversupply Ratio:** Compares annual course seats against estimated job openings over trailing 12 months (`estimatedOpenings = postingsInWindow \times scalingFactor`, default scaling factor 1.0). A low-sample guard (`estimatedOpenings < 20`) suppresses noise from small districts. Flagged oversupplied when `ratio > 1.5` and `lowSample == false`:
   $$\text{Oversupply Ratio} = \frac{\text{Course Seats}}{\text{Estimated Openings}}$$
+- **Obsolete Flag:** Identifies course offerings where curriculum coverage is critically low and the course's taught key skills are experiencing negative market demand momentum. A course offering is flagged obsolete when:
+  $$\text{Coverage} < \text{skillpath.flags.obsolete-coverage-threshold} \quad (\text{default } 40.0\%)$$
+  $$\text{Key Skill Trend} < 0$$
+  where $\text{Key Skill Trend} = \frac{\sum (\text{trend}_i \times \text{latestShare}_i)}{\sum \text{latestShare}_i}$ is the demand-weighted average trend of taught skills passing the min-postings guard (`skillpath.trends.min-postings=20`). If a course has no key skills in scope, $\text{keySkillTrend} = 0$ and $\text{obsolete} = \text{false}$.
 - **Gap Score:** Identifies national training shortfalls combining demand, absence in courses, and growth:
   $$\text{Gap Score} = \text{Demand Share}_{\text{last 3m}} \times (1.0 - \text{Course Coverage}) \times \text{Growth Factor}$$
 - **Recommendations (Add & Retire):** Recommends actionable curriculum updates for a course's linked roles across trailing windows (default 3 months) with minimum posting guard (`skillpath.trends.min-postings=20`):
@@ -112,7 +116,7 @@ A course in a district provides 100 seats. Job postings for linked roles in that
 $$\text{Oversupply Ratio} = \frac{100}{40} = 2.50$$
 Because estimated openings (40) satisfy the minimum threshold ($\ge 20$), `lowSample` is false. With a ratio of 2.50 exceeding the 1.5 threshold, the offering is flagged as `oversupplied = true`.
 
-Formulas are verified in test suites including `CourseControllerTest`, `CourseRecommendationsControllerTest`, `DemandControllerTest`, `DemandTrendsControllerTest`, `FlagControllerTest`, `AlignmentControllerTest`, and `CoursePatternsIntegrationTest`.
+Formulas are verified in test suites including `CourseControllerTest`, `CourseRecommendationsControllerTest`, `CourseObsoleteFlagsTest`, `DemandControllerTest`, `DemandTrendsControllerTest`, `FlagControllerTest`, `AlignmentControllerTest`, and `CoursePatternsIntegrationTest`.
 
 ---
 
@@ -125,7 +129,7 @@ Formulas are verified in test suites including `CourseControllerTest`, `CourseRe
 | `GET` | `/api/courses` | None | List of courses (`id`, `name`, `sector`, `durationWeeks`, `skillCount`, `linkedRoleCount`) |
 | `GET` | `/api/courses/{id}/alignment` | `role` (required), `district`, `topN`, `windowMonths` | Course coverage score (0–100), postings in scope, covered skills, and missing skills |
 | `GET` | `/api/courses/{id}/recommendations` | `district` | Ranked lists of skills to add and retire for linked roles with shares, trends, relative growth, and add scores |
-| `GET` | `/api/flags` | `district`, `minOpenings` | Course-district oversupply ratios, estimated openings, lowSample flags, and thresholds |
+| `GET` | `/api/flags` | `district`, `minOpenings` | Course-district oversupply ratios, obsolete flags, course coverage, keySkillTrend, keySkillCount, and fallingSkillCount |
 | `GET` | `/api/alignment/gaps` | None | Top 10 national skill gaps with demand share, course coverage, and growth factors |
 | `GET` | `/api/demand/summary` | None | System KPIs: total postings, skills, roles, districts, courses, and latest month postings |
 | `GET` | `/api/demand/skills` | `role`, `district`, `from`, `to`, `limit` | Ranked in-demand skills with posting counts and demand shares |

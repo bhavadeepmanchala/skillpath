@@ -13,6 +13,27 @@ public record FlagsResponse(
     double scalingFactor,
     double oversupplyThreshold,
     int minOpenings,
+    double obsoleteCoverageThreshold,
     List<CourseOversupplyItem> items
-) {}
-
+) {
+    public FlagsResponse(
+        int windowMonths,
+        LocalDate windowStart,
+        LocalDate windowEnd,
+        double scalingFactor,
+        double oversupplyThreshold,
+        int minOpenings,
+        List<CourseOversupplyItem> items
+    ) {
+        this(
+            windowMonths,
+            windowStart,
+            windowEnd,
+            scalingFactor,
+            oversupplyThreshold,
+            minOpenings,
+            40.0,
+            items
+        );
+    }
+}
