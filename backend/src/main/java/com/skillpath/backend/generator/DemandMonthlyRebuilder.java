@@ -1,5 +1,6 @@
 package com.skillpath.backend.generator;
 
+import com.skillpath.backend.service.OversupplyService;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -11,6 +12,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +29,19 @@ public class DemandMonthlyRebuilder {
     private static final int BATCH_SIZE = 5000;
 
     private final JdbcTemplate jdbcTemplate;
+    private final OversupplyService oversupplyService;
 
     public DemandMonthlyRebuilder(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, null);
+    }
+
+    @Autowired
+    public DemandMonthlyRebuilder(
+        JdbcTemplate jdbcTemplate,
+        @Autowired(required = false) OversupplyService oversupplyService
+    ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.oversupplyService = oversupplyService;
     }
 
     public record DemandMonthlyRow(
@@ -58,6 +70,9 @@ public class DemandMonthlyRebuilder {
      */
     @Transactional
     public long rebuild() {
+        if (oversupplyService != null) {
+            oversupplyService.clearCache();
+        }
         log.info("Starting demand_monthly rebuild from database postings...");
 
         // 1. Collect distinct dimensions with lightweight queries
@@ -223,6 +238,9 @@ public class DemandMonthlyRebuilder {
         }
 
         log.info("Rebuilt demand_monthly: inserted {} aggregate rows across active cells", totalInserted);
+        if (oversupplyService != null) {
+            oversupplyService.clearCache();
+        }
         return totalInserted;
     }
 

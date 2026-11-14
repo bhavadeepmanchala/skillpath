@@ -9,8 +9,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -18,8 +21,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class OversupplyService {
 
+    public static final int MAX_CACHE_ENTRIES = 50;
+
     private final JdbcTemplate jdbcTemplate;
     private final CourseService courseService;
+    private final ReadinessService readinessService;
+    private final SeedStatus seedStatus;
     private final int windowMonths;
     private final double scalingFactor;
     private final double oversupplyThreshold;
@@ -27,9 +34,14 @@ public class OversupplyService {
     private final double obsoleteCoverageThreshold;
     private final int minPostings;
 
+    private final ConcurrentHashMap<FlagsCacheKey, FlagsResponse> responseCache = new ConcurrentHashMap<>();
+
+    @Autowired
     public OversupplyService(
         JdbcTemplate jdbcTemplate,
         CourseService courseService,
+        @Autowired(required = false) ReadinessService readinessService,
+        @Autowired(required = false) SeedStatus seedStatus,
         @Value("${skillpath.flags.window-months:12}") int windowMonths,
         @Value("${skillpath.flags.openings-scaling-factor:1.0}") double scalingFactor,
         @Value("${skillpath.flags.oversupply-ratio-threshold:1.5}") double oversupplyThreshold,
@@ -39,12 +51,76 @@ public class OversupplyService {
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.courseService = courseService;
+        this.readinessService = readinessService;
+        this.seedStatus = seedStatus;
         this.windowMonths = windowMonths;
         this.scalingFactor = scalingFactor;
         this.oversupplyThreshold = oversupplyThreshold;
         this.minOpenings = minOpenings;
         this.obsoleteCoverageThreshold = obsoleteCoverageThreshold;
         this.minPostings = minPostings;
+
+        if (this.seedStatus != null) {
+            this.seedStatus.addCacheClearListener(this::clearCache);
+        } else if (this.readinessService != null && this.readinessService.getSeedStatus() != null) {
+            this.readinessService.getSeedStatus().addCacheClearListener(this::clearCache);
+        }
+    }
+
+    public OversupplyService(
+        JdbcTemplate jdbcTemplate,
+        CourseService courseService,
+        int windowMonths,
+        double scalingFactor,
+        double oversupplyThreshold,
+        int minOpenings,
+        double obsoleteCoverageThreshold,
+        int minPostings
+    ) {
+        this(jdbcTemplate, courseService, null, null, windowMonths, scalingFactor, oversupplyThreshold, minOpenings, obsoleteCoverageThreshold, minPostings);
+    }
+
+    public void clearCache() {
+        responseCache.clear();
+    }
+
+    public int getCacheSize() {
+        return responseCache.size();
+    }
+
+    public boolean isCached(Long districtId, Integer minOpenings) {
+        int effectiveMin = (minOpenings != null) ? minOpenings : this.minOpenings;
+        return responseCache.containsKey(new FlagsCacheKey(districtId, effectiveMin));
+    }
+
+    private void putCache(FlagsCacheKey key, FlagsResponse response) {
+        synchronized (responseCache) {
+            while (responseCache.size() >= MAX_CACHE_ENTRIES && !responseCache.containsKey(key)) {
+                Iterator<FlagsCacheKey> it = responseCache.keySet().iterator();
+                if (it.hasNext()) {
+                    responseCache.remove(it.next());
+                } else {
+                    break;
+                }
+            }
+            responseCache.put(key, response);
+        }
+    }
+
+    private boolean isReady() {
+        if (seedStatus != null) {
+            if (!SeedStatus.PHASE_READY.equals(seedStatus.getPhase())) {
+                return false;
+            }
+        }
+        if (readinessService == null) {
+            return false;
+        }
+        try {
+            return readinessService.getReadiness().ready();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public FlagsResponse getFlags(Long districtId) {
@@ -94,6 +170,23 @@ public class OversupplyService {
         double effectiveThreshold = (overrideThreshold != null) ? overrideThreshold : this.oversupplyThreshold;
         int effectiveMinOpenings = (overrideMinOpenings != null) ? overrideMinOpenings : this.minOpenings;
         double effectiveObsoleteThreshold = (overrideObsoleteThreshold != null) ? overrideObsoleteThreshold : this.obsoleteCoverageThreshold;
+
+        boolean isDefaultParams = (overrideWindowMonths == null || overrideWindowMonths == this.windowMonths)
+            && (overrideScalingFactor == null || Double.compare(overrideScalingFactor, this.scalingFactor) == 0)
+            && (overrideThreshold == null || Double.compare(overrideThreshold, this.oversupplyThreshold) == 0)
+            && (overrideObsoleteThreshold == null || Double.compare(overrideObsoleteThreshold, this.obsoleteCoverageThreshold) == 0);
+
+        boolean ready = isReady();
+        FlagsCacheKey cacheKey = null;
+        if (ready && isDefaultParams) {
+            cacheKey = new FlagsCacheKey(districtId, effectiveMinOpenings);
+            FlagsResponse cached = responseCache.get(cacheKey);
+            if (cached != null) {
+                return cached;
+            }
+        }
+
+        Map<CourseRoleDistrictKey, Double> coverageMemo = new HashMap<>();
 
         Date maxDateSql = jdbcTemplate.queryForObject(
             "SELECT MAX(posted_on) FROM job_posting",
@@ -292,12 +385,20 @@ public class OversupplyService {
                     double sumCoverage = 0.0;
                     int count = 0;
                     for (Long roleId : linkedRoles) {
-                        try {
-                            CourseAlignmentResponse resp = courseService.getCourseAlignment(courseId, roleId, distId, null, null);
-                            sumCoverage += resp.coverageScore();
+                        CourseRoleDistrictKey crdKey = new CourseRoleDistrictKey(courseId, roleId, distId);
+                        Double roleCoverage = coverageMemo.get(crdKey);
+                        if (roleCoverage == null) {
+                            try {
+                                CourseAlignmentResponse resp = courseService.getCourseAlignment(courseId, roleId, distId, null, null);
+                                roleCoverage = resp.coverageScore();
+                                coverageMemo.put(crdKey, roleCoverage);
+                            } catch (Exception e) {
+                                // ignore / skip if role or alignment lookup fails
+                            }
+                        }
+                        if (roleCoverage != null) {
+                            sumCoverage += roleCoverage;
                             count++;
-                        } catch (Exception e) {
-                            // ignore / skip if role or alignment lookup fails
                         }
                     }
                     if (count > 0) {
@@ -375,7 +476,7 @@ public class OversupplyService {
             .thenComparing(CourseOversupplyItem::districtId)
         );
 
-        return new FlagsResponse(
+        FlagsResponse response = new FlagsResponse(
             effectiveWindowMonths,
             windowStart,
             windowEnd,
@@ -385,8 +486,16 @@ public class OversupplyService {
             effectiveObsoleteThreshold,
             items
         );
+
+        if (cacheKey != null) {
+            putCache(cacheKey, response);
+        }
+
+        return response;
     }
 
+    public record FlagsCacheKey(Long districtId, int minOpenings) {}
+    private record CourseRoleDistrictKey(long courseId, long roleId, long districtId) {}
     private record CourseDistrictKey(long courseId, long districtId) {}
     private record SkillPostings(long skillId, long postingsPrev, long postingsLatest) {}
 }

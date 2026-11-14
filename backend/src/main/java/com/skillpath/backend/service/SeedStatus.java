@@ -1,5 +1,7 @@
 package com.skillpath.backend.service;
 
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
@@ -16,6 +18,7 @@ public class SeedStatus {
 
     private final boolean seedProfileActive;
     private final AtomicReference<String> phase;
+    private final List<Runnable> cacheClearListeners = new CopyOnWriteArrayList<>();
 
     @Autowired
     public SeedStatus(Environment environment) {
@@ -32,6 +35,20 @@ public class SeedStatus {
         this.phase = new AtomicReference<>(initialPhase);
     }
 
+    public void addCacheClearListener(Runnable listener) {
+        if (listener != null) {
+            this.cacheClearListeners.add(listener);
+        }
+    }
+
+    public void notifyCacheClear() {
+        for (Runnable listener : cacheClearListeners) {
+            try {
+                listener.run();
+            } catch (Exception ignored) {}
+        }
+    }
+
     public boolean isSeedProfileActive() {
         return seedProfileActive;
     }
@@ -42,17 +59,21 @@ public class SeedStatus {
 
     public void setPhase(String newPhase) {
         this.phase.set(newPhase);
+        notifyCacheClear();
     }
 
     public void setReady() {
         this.phase.set(PHASE_READY);
+        notifyCacheClear();
     }
 
     public void setFailed() {
         this.phase.set(PHASE_FAILED);
+        notifyCacheClear();
     }
 
     public void setSeeding() {
         this.phase.set(PHASE_SEEDING);
+        notifyCacheClear();
     }
 }

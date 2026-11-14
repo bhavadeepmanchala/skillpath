@@ -1,11 +1,13 @@
 package com.skillpath.backend.generator;
 
+import com.skillpath.backend.service.OversupplyService;
 import com.skillpath.backend.service.SeedStatus;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
@@ -23,6 +25,7 @@ public class SeedRunner implements ApplicationRunner {
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
     private final SeedStatus seedStatus;
+    private final OversupplyService oversupplyService;
 
     public SeedRunner(
         DataGenerator dataGenerator,
@@ -31,11 +34,24 @@ public class SeedRunner implements ApplicationRunner {
         JdbcTemplate jdbcTemplate,
         SeedStatus seedStatus
     ) {
+        this(dataGenerator, courseGenerator, dataSource, jdbcTemplate, seedStatus, null);
+    }
+
+    @Autowired
+    public SeedRunner(
+        DataGenerator dataGenerator,
+        CourseGenerator courseGenerator,
+        DataSource dataSource,
+        JdbcTemplate jdbcTemplate,
+        SeedStatus seedStatus,
+        @Autowired(required = false) OversupplyService oversupplyService
+    ) {
         this.dataGenerator = dataGenerator;
         this.courseGenerator = courseGenerator;
         this.dataSource = dataSource;
         this.jdbcTemplate = jdbcTemplate;
         this.seedStatus = seedStatus;
+        this.oversupplyService = oversupplyService;
     }
 
     @Override
@@ -53,6 +69,10 @@ public class SeedRunner implements ApplicationRunner {
         }
 
         log.info("Running synthetic data seed against database product: {}", productName);
+
+        if (oversupplyService != null) {
+            oversupplyService.clearCache();
+        }
 
         if (isH2Mem) {
             log.warn("================================================================================");
@@ -94,9 +114,15 @@ public class SeedRunner implements ApplicationRunner {
 
             log.info("Synthetic reference data seeding completed successfully.");
             seedStatus.setPhase(SeedStatus.PHASE_READY);
+            if (oversupplyService != null) {
+                oversupplyService.clearCache();
+            }
         } catch (Throwable t) {
             log.error("Synthetic data seeding failed", t);
             seedStatus.setPhase(SeedStatus.PHASE_FAILED);
+            if (oversupplyService != null) {
+                oversupplyService.clearCache();
+            }
         }
     }
 

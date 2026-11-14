@@ -15,6 +15,10 @@ public class ReadinessService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    public SeedStatus getSeedStatus() {
+        return seedStatus;
+    }
+
     public ReadinessResponse getReadiness() {
         if (seedStatus.isSeedProfileActive()) {
             String phase = seedStatus.getPhase();
