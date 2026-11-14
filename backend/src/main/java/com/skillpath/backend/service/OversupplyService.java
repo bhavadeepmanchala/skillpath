@@ -13,6 +13,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,6 +23,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class OversupplyService {
 
+    private static final Logger log = LoggerFactory.getLogger(OversupplyService.class);
     public static final int MAX_CACHE_ENTRIES = 50;
 
     private final JdbcTemplate jdbcTemplate;
@@ -91,6 +94,13 @@ public class OversupplyService {
     public boolean isCached(Long districtId, Integer minOpenings) {
         int effectiveMin = (minOpenings != null) ? minOpenings : this.minOpenings;
         return responseCache.containsKey(new FlagsCacheKey(districtId, effectiveMin));
+    }
+
+    public void warmUp() {
+        log.info("Warming up flags cache for national default query...");
+        FlagsResponse response = getFlags(null, this.windowMonths, this.scalingFactor, this.oversupplyThreshold, this.minOpenings, this.obsoleteCoverageThreshold);
+        putCache(new FlagsCacheKey(null, this.minOpenings), response);
+        log.info("Flags cache warm-up completed: {} items cached", response.items().size());
     }
 
     private void putCache(FlagsCacheKey key, FlagsResponse response) {
@@ -205,7 +215,21 @@ public class OversupplyService {
                 co."year" AS offering_year,
                 co.seats AS seats,
                 co.trainers AS trainers,
-                (SELECT COUNT(*) FROM course_role cr WHERE cr.course_id = c.id) AS linked_role_count,
+                COALESCE(cr_cnt.role_count, 0) AS linked_role_count,
+                COALESCE(jp_agg.posting_count, 0) AS postings_in_window
+            FROM course_offering co
+            JOIN (
+                SELECT course_id, district_id, MAX("year") AS max_year
+                FROM course_offering
+                GROUP BY course_id, district_id
+            ) co_max ON co_max.course_id = co.course_id AND co_max.district_id = co.district_id AND co_max.max_year = co."year"
+            JOIN course c ON c.id = co.course_id
+            JOIN district d ON d.id = co.district_id
+            LEFT JOIN (
+                SELECT course_id, COUNT(*) AS role_count
+                FROM course_role
+                GROUP BY course_id
+            ) cr_cnt ON cr_cnt.course_id = co.course_id
         """);
 
         List<Object> params = new ArrayList<>();
@@ -214,32 +238,35 @@ public class OversupplyService {
             windowEnd = maxDateSql.toLocalDate();
             windowStart = windowEnd.minusMonths(effectiveWindowMonths).plusDays(1);
             sql.append("""
-                (SELECT COUNT(*) FROM job_posting jp
-                 WHERE jp.district_id = co.district_id
-                   AND jp.posted_on >= ?
-                   AND jp.posted_on <= ?
-                   AND jp.role_id IN (SELECT cr2.role_id FROM course_role cr2 WHERE cr2.course_id = c.id)
-                ) AS postings_in_window
+            LEFT JOIN (
+                SELECT cr.course_id, jp.district_id, COUNT(*) AS posting_count
+                FROM job_posting jp
+                JOIN course_role cr ON cr.role_id = jp.role_id
+                WHERE jp.posted_on >= ? AND jp.posted_on <= ?
             """);
             params.add(Date.valueOf(windowStart));
             params.add(Date.valueOf(windowEnd));
+
+            if (districtId != null) {
+                sql.append(" AND jp.district_id = ?");
+                params.add(districtId);
+            }
+
+            sql.append("""
+                GROUP BY cr.course_id, jp.district_id
+            ) jp_agg ON jp_agg.course_id = co.course_id AND jp_agg.district_id = co.district_id
+            """);
         } else {
-            sql.append("0 AS postings_in_window ");
+            sql.append("""
+            LEFT JOIN (
+                SELECT NULL AS course_id, NULL AS district_id, 0 AS posting_count
+                WHERE 1 = 0
+            ) jp_agg ON 1 = 0
+            """);
         }
 
-        sql.append("""
-            FROM course_offering co
-            JOIN course c ON c.id = co.course_id
-            JOIN district d ON d.id = co.district_id
-            WHERE co."year" = (
-                SELECT MAX(co2."year")
-                FROM course_offering co2
-                WHERE co2.course_id = co.course_id AND co2.district_id = co.district_id
-            )
-        """);
-
         if (districtId != null) {
-            sql.append(" AND co.district_id = ?");
+            sql.append(" WHERE co.district_id = ?");
             params.add(districtId);
         }
 

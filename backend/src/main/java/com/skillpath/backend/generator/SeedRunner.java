@@ -84,6 +84,14 @@ public class SeedRunner implements ApplicationRunner {
         try {
             if (isDatabasePopulated()) {
                 log.info("Database tables are not empty; skipping synthetic data seeding.");
+                if (oversupplyService != null) {
+                    oversupplyService.clearCache();
+                    try {
+                        oversupplyService.warmUp();
+                    } catch (Throwable t) {
+                        log.warn("Flags cache warm-up failed, continuing startup without warm cache: {}", t.getMessage());
+                    }
+                }
                 seedStatus.setPhase(SeedStatus.PHASE_READY);
                 return;
             }
@@ -113,10 +121,15 @@ public class SeedRunner implements ApplicationRunner {
             );
 
             log.info("Synthetic reference data seeding completed successfully.");
-            seedStatus.setPhase(SeedStatus.PHASE_READY);
             if (oversupplyService != null) {
                 oversupplyService.clearCache();
+                try {
+                    oversupplyService.warmUp();
+                } catch (Throwable t) {
+                    log.warn("Flags cache warm-up failed, continuing startup without warm cache: {}", t.getMessage());
+                }
             }
+            seedStatus.setPhase(SeedStatus.PHASE_READY);
         } catch (Throwable t) {
             log.error("Synthetic data seeding failed", t);
             seedStatus.setPhase(SeedStatus.PHASE_FAILED);

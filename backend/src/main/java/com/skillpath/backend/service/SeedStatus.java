@@ -59,12 +59,13 @@ public class SeedStatus {
 
     public void setPhase(String newPhase) {
         this.phase.set(newPhase);
-        notifyCacheClear();
+        if (!PHASE_READY.equals(newPhase)) {
+            notifyCacheClear();
+        }
     }
 
     public void setReady() {
         this.phase.set(PHASE_READY);
-        notifyCacheClear();
     }
 
     public void setFailed() {
