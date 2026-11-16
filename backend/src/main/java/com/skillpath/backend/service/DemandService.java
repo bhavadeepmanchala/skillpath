@@ -12,6 +12,7 @@ import com.skillpath.backend.exception.ResourceNotFoundException;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -179,13 +180,66 @@ public class DemandService {
 
         List<SkillDemandItem> limitedItems = items.stream().limit(effectiveLimit).toList();
 
+        List<SkillDemandItem> finalItems = new ArrayList<>(limitedItems.size());
+        if (!limitedItems.isEmpty()) {
+            List<Long> skillIds = limitedItems.stream().map(SkillDemandItem::skillId).toList();
+            String placeholders = String.join(",", Collections.nCopies(skillIds.size(), "?"));
+
+            String valSql;
+            List<Object> valParams = new ArrayList<>();
+            if (roleId != null) {
+                valSql = "SELECT skill_id, " +
+                    "SUM(CASE WHEN status = 'CONFIRMED' THEN 1 ELSE 0 END) AS confirmed_count, " +
+                    "SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) AS disputed_count " +
+                    "FROM employer_validation " +
+                    "WHERE role_id = ? AND skill_id IN (" + placeholders + ") " +
+                    "GROUP BY skill_id";
+                valParams.add(roleId);
+                valParams.addAll(skillIds);
+            } else {
+                valSql = "SELECT skill_id, " +
+                    "SUM(CASE WHEN status = 'CONFIRMED' THEN 1 ELSE 0 END) AS confirmed_count, " +
+                    "SUM(CASE WHEN status = 'DISPUTED' THEN 1 ELSE 0 END) AS disputed_count " +
+                    "FROM employer_validation " +
+                    "WHERE skill_id IN (" + placeholders + ") " +
+                    "GROUP BY skill_id";
+                valParams.addAll(skillIds);
+            }
+
+            record ValidationCountPair(long confirmed, long disputed) {}
+            Map<Long, ValidationCountPair> countsMap = new HashMap<>();
+            jdbcTemplate.query(valSql, rs -> {
+                long sId = rs.getLong("skill_id");
+                long c = rs.getLong("confirmed_count");
+                long d = rs.getLong("disputed_count");
+                countsMap.put(sId, new ValidationCountPair(c, d));
+            }, valParams.toArray());
+
+            for (SkillDemandItem item : limitedItems) {
+                ValidationCountPair counts = countsMap.get(item.skillId());
+                long confirmed = counts != null ? counts.confirmed() : 0L;
+                long disputed = counts != null ? counts.disputed() : 0L;
+                double confidence = ValidationService.calculateConfidence(confirmed, disputed);
+                finalItems.add(new SkillDemandItem(
+                    item.skillId(),
+                    item.name(),
+                    item.category(),
+                    item.postingsWithSkill(),
+                    item.share(),
+                    confirmed,
+                    disputed,
+                    confidence
+                ));
+            }
+        }
+
         return new DemandSkillsResponse(
             effectiveFrom,
             effectiveTo,
             roleId,
             districtId,
             totalPostings,
-            limitedItems
+            finalItems
         );
     }
 

@@ -110,13 +110,16 @@ All metrics are deterministic, transparent, and verified through unit tests:
     $$\text{Score} = \text{Demand Share}_{\text{latest}} \times (1 + \max(0, \text{Relative Growth}))$$
     *(Note on formula choice: We use $\text{latestShare} \times (1 + \max(0, \text{relativeGrowth}))$ rather than pure $\text{share} \times \text{trend}$ because a pure product would give a flat high-demand skill with $\text{trend} = 0$ a score of zero, failing to recommend critical stable core skills.)*
   - **Skills to RETIRE:** Taught skills meeting three concurrent criteria: negative momentum ($\text{Trend} < 0$), significant relative contraction ($\text{Relative Growth} \le -\text{retire-min-decline}$, default 0.10, i.e., at least 10% relative fall), and moderate market presence ($\text{Demand Share}_{\text{latest}} \le \text{retire-max-share}$, default 0.40, preventing still-dominant core skills from retirement). Ranked by relative growth ascending (steepest fall first), then latest demand share ascending, then skill ID.
+- **Employer Validation Confidence:** Measures confidence for a specific `(role, skill)` pair based on employer feedback. Validation modifies reported confidence only; underlying demand counts and shares remain unchanged. Calculated deterministically as:
+  $$\text{Confidence} = \frac{\text{Confirmed} + 1}{\text{Confirmed} + \text{Disputed} + 2}$$
+  With no validations ($0$ confirmed, $0$ disputed), confidence evaluates to $0.5$. A single confirmation yields $2/3 \approx 0.667$; a single dispute yields $1/3 \approx 0.333$; 3 confirmations and 1 dispute yields $4/6 \approx 0.667$. The score is always strictly between $0$ and $1$.
 
 ### Worked Example: Oversupply Flag
 A course in a district provides 100 seats. Job postings for linked roles in that district total 40 over trailing 12 months with a 1.0 scaling factor ($\text{estimatedOpenings} = 40 \times 1.0 = 40$).
 $$\text{Oversupply Ratio} = \frac{100}{40} = 2.50$$
 Because estimated openings (40) satisfy the minimum threshold ($\ge 20$), `lowSample` is false. With a ratio of 2.50 exceeding the 1.5 threshold, the offering is flagged as `oversupplied = true`.
 
-Formulas are verified in test suites including `CourseControllerTest`, `CourseRecommendationsControllerTest`, `CourseObsoleteFlagsTest`, `DemandControllerTest`, `DemandTrendsControllerTest`, `FlagControllerTest`, `AlignmentControllerTest`, and `CoursePatternsIntegrationTest`.
+Formulas are verified in test suites including `CourseControllerTest`, `CourseRecommendationsControllerTest`, `CourseObsoleteFlagsTest`, `DemandControllerTest`, `DemandTrendsControllerTest`, `FlagControllerTest`, `AlignmentControllerTest`, `CoursePatternsIntegrationTest`, and `ValidationControllerTest`.
 
 ---
 
@@ -132,10 +135,12 @@ Formulas are verified in test suites including `CourseControllerTest`, `CourseRe
 | `GET` | `/api/flags` | `district`, `minOpenings` | Course-district oversupply ratios, obsolete flags, course coverage, keySkillTrend, keySkillCount, and fallingSkillCount |
 | `GET` | `/api/alignment/gaps` | None | Top 10 national skill gaps with demand share, course coverage, and growth factors |
 | `GET` | `/api/demand/summary` | None | System KPIs: total postings, skills, roles, districts, courses, and latest month postings |
-| `GET` | `/api/demand/skills` | `role`, `district`, `from`, `to`, `limit` | Ranked in-demand skills with posting counts and demand shares |
+| `GET` | `/api/demand/skills` | `role`, `district`, `from`, `to`, `limit` | Ranked in-demand skills with posting counts, demand shares, and employer validation counts (`confirmedCount`, `disputedCount`, `confidence`) |
 | `GET` | `/api/demand/skills/{id}/trend` | `role`, `district`, `from`, `to` | Monthly historical posting count and share trend points for a specific skill |
 | `GET` | `/api/demand/trends` | `role`, `district`, `window`, `limit` | Top rising and declining skills by momentum change with window date ranges |
 | `GET` | `/api/demand/districts` | `from`, `to` | Postings by district and percentage share of total volume |
+| `POST` | `/api/validations` | None (JSON body: `roleId`, `skillId`, `status`, `note`) | Creates an employer validation (`CONFIRMED`/`DISPUTED`), returns 201 with record and updated confidence for the pair |
+| `GET` | `/api/validations` | `role`, `skill` | Summary rows per `(roleId, skillId)` with `confirmedCount`, `disputedCount`, and `confidence` (capped at 100 rows, ordered by total validations descending) |
 | `GET` | `/api/ready` | None | System readiness status (`ready`, `phase`, `synthetic`) |
 
 ---
@@ -264,6 +269,8 @@ Live demo URL: `https://skillpath-v.vercel.app`
 - **Client-Side Student Readiness:** Student readiness percentages are computed inside React components from individual skill demand shares rather than a dedicated backend API.
 - **Unsaved Student Selections:** Student checklist ticks and profile selections persist only in browser `localStorage` or URL query parameters.
 - **Parallel Client-Side Alignment Requests:** The frontend issues up to 24 parallel requests to `/api/courses/{id}/alignment` because no bulk alignment endpoint exists.
+- **In-Memory Validations and Reset on Restart or Re-seed:** Validations submitted via `/api/validations` are stored in in-memory H2. Validations are lost whenever the backend restarts or whenever seed data is regenerated.
+- **Validation Abuse Protection and Public Demo Authentication:** As a public demonstration, the validation write endpoint has no user authentication. Abuse protection is provided via a hard cap on total stored validations (`skillpath.validations.max-total=2000`, returning HTTP 429 when reached), strict enum validation for status (`CONFIRMED` or `DISPUTED`), and length checks on optional notes (max 500 characters, stored and displayed strictly as plain text).
 - **Legacy v1 Backend Code:** `AnalyzeController` (`/api/analyze`), `SkillMatchService`, `GeminiService`, and `data.json` remain in the backend solely to keep the legacy v1 deployment functional; no v2 frontend pages call them.
 
 ---

@@ -15,6 +15,9 @@ export interface SkillDemandItem {
   category: string
   postingsWithSkill: number
   share: number
+  confirmedCount?: number
+  disputedCount?: number
+  confidence?: number
 }
 
 export interface DemandSkillsResponse {

@@ -96,6 +96,7 @@ public class SeedRunner implements ApplicationRunner {
                 return;
             }
 
+            jdbcTemplate.execute("DELETE FROM employer_validation");
             dataGenerator.run();
             courseGenerator.run();
 
