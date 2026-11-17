@@ -92,34 +92,47 @@ The Next.js client renders policymaker and student interfaces, communicating via
 All metrics are deterministic, transparent, and verified through unit tests:
 
 - **Demand Share:** The proportion of postings requiring a skill within a specified role, district, and time window:
-  $$\text{Demand Share} = \frac{\text{Postings With Skill}}{\text{Total Postings in Scope}}$$
+  `Demand Share = Postings With Skill / Total Postings in Scope`
 - **Trend (Momentum):** Absolute change in demand share between the latest window and the preceding window of equal length (default 3 months). A minimum posting guard (`skillpath.trends.min-postings=20`) excludes low-volume skills:
-  $$\text{Momentum} = \text{Demand Share}_{\text{latest}} - \text{Demand Share}_{\text{previous}}$$
+  `Momentum = Demand Share (latest) - Demand Share (previous)`
 - **Course Coverage:** The share-weighted coverage of a target role's top-15 skills taught by a course (default 3-month window). Known limitation: ignores `taught_level` and treats any taught skill as covered:
-  $$\text{Course Coverage} = \frac{\sum_{s \in \text{Covered Top-15}} \text{Demand Share}(s)}{\sum_{s \in \text{Top-15}} \text{Demand Share}(s)} \times 100$$
-- **Oversupply Ratio:** Compares annual course seats against estimated job openings over trailing 12 months (`estimatedOpenings = postingsInWindow \times scalingFactor`, default scaling factor 1.0). A low-sample guard (`estimatedOpenings < 20`) suppresses noise from small districts. Flagged oversupplied when `ratio > 1.5` and `lowSample == false`:
-  $$\text{Oversupply Ratio} = \frac{\text{Course Seats}}{\text{Estimated Openings}}$$
+  `Course Coverage = (sum of Demand Share for covered top-15 skills / sum of Demand Share for all top-15 skills) * 100`
+- **Oversupply Ratio:** Compares annual course seats against estimated job openings over trailing 12 months (`estimatedOpenings = postingsInWindow * scalingFactor`, default scaling factor 1.0). A low-sample guard (`estimatedOpenings < 20`) suppresses noise from small districts. Flagged oversupplied when `ratio > 1.5` and `lowSample == false`:
+  `Oversupply Ratio = Course Seats / Estimated Openings`
 - **Obsolete Flag:** Identifies course offerings where curriculum coverage is critically low and the course's taught key skills are experiencing negative market demand momentum. A course offering is flagged obsolete when:
-  $$\text{Coverage} < \text{skillpath.flags.obsolete-coverage-threshold} \quad (\text{default } 40.0\%)$$
-  $$\text{Key Skill Trend} < 0$$
-  where $\text{Key Skill Trend} = \frac{\sum (\text{trend}_i \times \text{latestShare}_i)}{\sum \text{latestShare}_i}$ is the demand-weighted average trend of taught skills passing the min-postings guard (`skillpath.trends.min-postings=20`). If a course has no key skills in scope, $\text{keySkillTrend} = 0$ and $\text{obsolete} = \text{false}$.
+  `Coverage < skillpath.flags.obsolete-coverage-threshold` (default 40.0%) and `Key Skill Trend < 0`
+  where `Key Skill Trend = sum(trend_i * latestShare_i) / sum(latestShare_i)` is the demand-weighted average trend of taught skills passing the min-postings guard (`skillpath.trends.min-postings=20`). If a course has no key skills in scope, `keySkillTrend = 0` and `obsolete = false`.
 - **Gap Score:** Identifies national training shortfalls combining demand, absence in courses, and growth:
-  $$\text{Gap Score} = \text{Demand Share}_{\text{last 3m}} \times (1.0 - \text{Course Coverage}) \times \text{Growth Factor}$$
+  `Gap Score = Demand Share (last 3m) * (1.0 - Course Coverage) * Growth Factor`
 - **Recommendations (Add & Retire):** Recommends actionable curriculum updates for a course's linked roles across trailing windows (default 3 months) with minimum posting guard (`skillpath.trends.min-postings=20`):
-  - **Skills to ADD:** Untaught skills with $\text{Demand Share}_{\text{latest}} \ge \text{min-share-for-add}$ (default 0.05). Ranked by:
-    $$\text{Score} = \text{Demand Share}_{\text{latest}} \times (1 + \max(0, \text{Relative Growth}))$$
-    *(Note on formula choice: We use $\text{latestShare} \times (1 + \max(0, \text{relativeGrowth}))$ rather than pure $\text{share} \times \text{trend}$ because a pure product would give a flat high-demand skill with $\text{trend} = 0$ a score of zero, failing to recommend critical stable core skills.)*
-  - **Skills to RETIRE:** Taught skills meeting three concurrent criteria: negative momentum ($\text{Trend} < 0$), significant relative contraction ($\text{Relative Growth} \le -\text{retire-min-decline}$, default 0.10, i.e., at least 10% relative fall), and moderate market presence ($\text{Demand Share}_{\text{latest}} \le \text{retire-max-share}$, default 0.40, preventing still-dominant core skills from retirement). Ranked by relative growth ascending (steepest fall first), then latest demand share ascending, then skill ID.
+  - **Skills to ADD:** Untaught skills with `Demand Share (latest) >= min-share-for-add` (default 0.05). Ranked by:
+    `Score = Demand Share (latest) * (1 + max(0, Relative Growth))`
+    *(Note on formula choice: We use `latestShare * (1 + max(0, relativeGrowth))` rather than pure `share * trend` because a pure product would give a flat high-demand skill with `trend = 0` a score of zero, failing to recommend critical stable core skills.)*
+  - **Skills to RETIRE:** Taught skills meeting three concurrent criteria: negative momentum (`Trend < 0`), significant relative contraction (`Relative Growth <= -retire-min-decline`, default 0.10, i.e., at least 10% relative fall), and moderate market presence (`Demand Share (latest) <= retire-max-share`, default 0.40, preventing still-dominant core skills from retirement). Ranked by relative growth ascending (steepest fall first), then latest demand share ascending, then skill ID.
+- **District Training Plan:** Generates deterministic training and staffing recommendations for courses already offered in a district (`GET /api/districts/{id}/plan`):
+  - **INSUFFICIENT_DATA:** When `estimatedOpenings < skillpath.flags.min-openings` (default 20). No other action applies: `actions = ["KEEP"]`, `reasons = ["INSUFFICIENT_DATA"]`, `recommendedSeats = seats`, `trainersNeeded = trainers`.
+  - **REDUCE:** When `oversupplied == true` (using the existing flag). `recommendedSeats = ceil(estimatedOpenings * targetRatio)`, reason `OVERSUPPLIED`.
+  - **REVISE:** When `obsolete == true` (reason `OBSOLETE`) OR `coverage < skillpath.plan.revise-coverage-threshold` (reason `LOW_COVERAGE`, default 40.0%). Seats are not modified by REVISE alone. Carries top `skillpath.plan.revise-max-skills` (default 3) ADD skills and RETIRE skills from `RecommendationService`.
+  - **EXPAND:** When not oversupplied and `ratio < skillpath.plan.expand-below-ratio` (default 0.70). `recommendedSeats = ceil(estimatedOpenings * targetRatio)`, reason `UNDER_SUPPLIED`.
+  - **KEEP:** When none of the above rules trigger. `actions = ["KEEP"]`, `reasons = ["WITHIN_RANGE"]`.
+  - **Staffing & Capacity:** If neither REDUCE nor EXPAND applies, `recommendedSeats = seats`. Trainers needed is calculated as `trainersNeeded = max(0, ceil(recommendedSeats / skillpath.plan.seats-per-trainer))` (default 25 seats per trainer). `seatChange = recommendedSeats - seats` and `trainerChange = trainersNeeded - trainers`.
+  - **Ordering:** Items are ordered by action priority (`REDUCE` > `REVISE` > `EXPAND` > `KEEP`), then oversupply ratio descending, then course ID ascending.
+  - **Configuration Keys:**
+    - `skillpath.plan.target-ratio=1.0`: Target seat-to-openings ratio for capacity adjustments.
+    - `skillpath.plan.expand-below-ratio=0.7`: Ratio threshold below which courses qualify for expansion.
+    - `skillpath.plan.revise-coverage-threshold=40.0`: Alignment coverage % threshold triggering curriculum revision.
+    - `skillpath.plan.revise-max-skills=3`: Maximum ADD and RETIRE skills returned per revised offering.
+    - `skillpath.plan.seats-per-trainer=25`: Benchmark student-to-trainer capacity ratio.
 - **Employer Validation Confidence:** Measures confidence for a specific `(role, skill)` pair based on employer feedback. Validation modifies reported confidence only; underlying demand counts and shares remain unchanged. Calculated deterministically as:
-  $$\text{Confidence} = \frac{\text{Confirmed} + 1}{\text{Confirmed} + \text{Disputed} + 2}$$
-  With no validations ($0$ confirmed, $0$ disputed), confidence evaluates to $0.5$. A single confirmation yields $2/3 \approx 0.667$; a single dispute yields $1/3 \approx 0.333$; 3 confirmations and 1 dispute yields $4/6 \approx 0.667$. The score is always strictly between $0$ and $1$.
+  `Confidence = (Confirmed + 1) / (Confirmed + Disputed + 2)`
+  With no validations (0 confirmed, 0 disputed), confidence evaluates to 0.5. A single confirmation yields 2/3 ≈ 0.667; a single dispute yields 1/3 ≈ 0.333; 3 confirmations and 1 dispute yields 4/6 ≈ 0.667. The score is always strictly between 0 and 1.
 
 ### Worked Example: Oversupply Flag
-A course in a district provides 100 seats. Job postings for linked roles in that district total 40 over trailing 12 months with a 1.0 scaling factor ($\text{estimatedOpenings} = 40 \times 1.0 = 40$).
-$$\text{Oversupply Ratio} = \frac{100}{40} = 2.50$$
-Because estimated openings (40) satisfy the minimum threshold ($\ge 20$), `lowSample` is false. With a ratio of 2.50 exceeding the 1.5 threshold, the offering is flagged as `oversupplied = true`.
+A course in a district provides 100 seats. Job postings for linked roles in that district total 40 over trailing 12 months with a 1.0 scaling factor (`estimatedOpenings = 40 * 1.0 = 40`).
+`Oversupply Ratio = 100 / 40 = 2.50`
+Because estimated openings (40) satisfy the minimum threshold (>= 20), `lowSample` is false. With a ratio of 2.50 exceeding the 1.5 threshold, the offering is flagged as `oversupplied = true`.
 
-Formulas are verified in test suites including `CourseControllerTest`, `CourseRecommendationsControllerTest`, `CourseObsoleteFlagsTest`, `DemandControllerTest`, `DemandTrendsControllerTest`, `FlagControllerTest`, `AlignmentControllerTest`, `CoursePatternsIntegrationTest`, and `ValidationControllerTest`.
+Formulas are verified in test suites including `CourseControllerTest`, `CourseRecommendationsControllerTest`, `CourseObsoleteFlagsTest`, `DemandControllerTest`, `DemandTrendsControllerTest`, `FlagControllerTest`, `AlignmentControllerTest`, `CoursePatternsIntegrationTest`, `ValidationControllerTest`, and `DistrictPlanControllerTest`.
 
 ---
 
@@ -141,6 +154,7 @@ Formulas are verified in test suites including `CourseControllerTest`, `CourseRe
 | `GET` | `/api/demand/districts` | `from`, `to` | Postings by district and percentage share of total volume |
 | `POST` | `/api/validations` | None (JSON body: `roleId`, `skillId`, `status`, `note`) | Creates an employer validation (`CONFIRMED`/`DISPUTED`), returns 201 with record and updated confidence for the pair |
 | `GET` | `/api/validations` | `role`, `skill` | Summary rows per `(roleId, skillId)` with `confirmedCount`, `disputedCount`, and `confidence` (capped at 100 rows, ordered by total validations descending) |
+| `GET` | `/api/districts/{id}/plan` | `targetRatio`, `expandBelowRatio`, `reviseCoverageThreshold`, `reviseMaxSkills`, `seatsPerTrainer`, `minOpenings` | Deterministic district training plan for offered courses with capacity, trainer needs, action recommendations (`REDUCE`, `REVISE`, `EXPAND`, `KEEP`), add/retire skills, action counts, totals, and configuration values |
 | `GET` | `/api/ready` | None | System readiness status (`ready`, `phase`, `synthetic`) |
 
 ---
