@@ -1,5 +1,6 @@
 package com.skillpath.backend.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
@@ -8,9 +9,11 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jayway.jsonpath.JsonPath;
 import com.skillpath.backend.service.OversupplyService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -156,14 +159,8 @@ class DistrictPlanControllerTest {
         jdbcTemplate.execute("INSERT INTO course_offering (course_id, district_id, \"year\", seats, trainers) VALUES (5, 1, 2026, 50, 2)");
         jdbcTemplate.execute("INSERT INTO course_offering (course_id, district_id, \"year\", seats, trainers) VALUES (6, 1, 2026, 30, 2)");
 
-        // Job postings (12-month window: ending 2026-09-30)
-        long jpId = 1L;
-        // Role 1 in District 1: 50 postings in window (max date 2026-09-30)
-        // Wait: C1, C2, C3, C4, C5 are all linked to Role 1.
-        // Wait: in OversupplyService:
-        // jp_agg joins job_posting jp ON cr.role_id = jp.role_id and jp.district_id = co.district_id
-        // If Role 1 has 50 postings, then every course linked to Role 1 sees 50 postings!
-        // To give distinct estimated openings to each course, we should link them to distinct roles!
+        jdbcTemplate.execute("INSERT INTO demand_monthly (district_id, role_id, skill_id, \"month\", postings_with_skill, postings_total) VALUES (1, 1, 1, '2026-09', 10, 20)");
+        jdbcTemplate.execute("INSERT INTO job_posting (id, role_id, district_id, posted_on, level) VALUES (1, 1, 1, '2026-09-30', 'Mid')");
     }
 
     private void setupDistinctRolesForCourses() {
@@ -332,14 +329,12 @@ class DistrictPlanControllerTest {
             .andExpect(jsonPath("$.items[?(@.courseId == 2)].trainersNeeded").value(2))
             .andExpect(jsonPath("$.items[?(@.courseId == 2)].trainerChange").value(0))
             // Carries ADD skills (Skills 3 & 4 are not taught and high demand)
-            .andExpect(jsonPath("$.items[?(@.courseId == 2)].addSkills").isNotEmpty())
             .andExpect(jsonPath("$.items[?(@.courseId == 2)].add").isNotEmpty())
-            .andExpect(jsonPath("$.items[?(@.courseId == 2)].addSkills[0][0].skillName", notNullValue()))
-            .andExpect(jsonPath("$.items[?(@.courseId == 2)].addSkills[0][0].latestShare", notNullValue()))
-            .andExpect(jsonPath("$.items[?(@.courseId == 2)].addSkills[0][0].trend", notNullValue()))
-            .andExpect(jsonPath("$.items[?(@.courseId == 2)].addSkills[0][0].score", notNullValue()))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].add[0][0].skillName", notNullValue()))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].add[0][0].latestShare", notNullValue()))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].add[0][0].trend", notNullValue()))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].add[0][0].score", notNullValue()))
             // Carries RETIRE skills (Skills 1 & 2 are taught and declining)
-            .andExpect(jsonPath("$.items[?(@.courseId == 2)].retireSkills").isNotEmpty())
             .andExpect(jsonPath("$.items[?(@.courseId == 2)].retire").isNotEmpty());
     }
 
@@ -364,7 +359,7 @@ class DistrictPlanControllerTest {
             .andExpect(jsonPath("$.items[?(@.courseId == 3)].seatChange").value(-60))
             .andExpect(jsonPath("$.items[?(@.courseId == 3)].trainersNeeded").value(2))
             .andExpect(jsonPath("$.items[?(@.courseId == 3)].trainerChange").value(-1))
-            .andExpect(jsonPath("$.items[?(@.courseId == 3)].addSkills").isNotEmpty());
+            .andExpect(jsonPath("$.items[?(@.courseId == 3)].add").isNotEmpty());
     }
 
     /**
@@ -609,5 +604,146 @@ class DistrictPlanControllerTest {
             .andExpect(jsonPath("$.districtId").value(1))
             .andExpect(jsonPath("$.add").isArray())
             .andExpect(jsonPath("$.retire").isArray());
+    }
+
+    /**
+     * Test 14 (a): While not ready the plan returns 503 with the Retry-After header, and once ready it returns 200.
+     */
+    @Test
+    void testNotReadyReturns503WithRetryAfterHeaderAndReadyReturns200() throws Exception {
+        // When not ready (demand_monthly empty and seed profile not active)
+        cleanTables();
+        mockMvc.perform(get("/api/districts/1/plan"))
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(header().string("Retry-After", "5"))
+            .andExpect(jsonPath("$.error", is("Data is still loading, try again shortly")))
+            .andExpect(jsonPath("$.message", is("Data is still loading, try again shortly")));
+
+        // Once ready (demand_monthly has data)
+        setupDistinctRolesForCourses();
+        mockMvc.perform(get("/api/districts/1/plan"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.districtId", is(1)));
+    }
+
+    /**
+     * Test 15 (b): A REVISE-only course keeps trainers and trainerChange is 0 even when seats / seats-per-trainer would round differently.
+     */
+    @Test
+    void testReviseOnlyCourseKeepsTrainersAndTrainerChangeZeroWhenRoundingDiffers() throws Exception {
+        setupDistinctRolesForCourses();
+        // Update Course 2 (REVISE-only) to 57 seats, 2 trainers.
+        // With default 25 seats per trainer, ceil(57 / 25) = 3.
+        // Because recommendedSeats == seats (57 == 57), trainersNeeded must stay 2 and trainerChange must be 0.
+        jdbcTemplate.update("UPDATE course_offering SET seats = 57, trainers = 2 WHERE course_id = 2 AND district_id = 1");
+
+        mockMvc.perform(get("/api/districts/1/plan"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].actions", hasItem(contains("REVISE"))))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].seats").value(57))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].recommendedSeats").value(57))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].trainers").value(2))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].trainersNeeded").value(2))
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].trainerChange").value(0));
+    }
+
+    /**
+     * Test 16 (c): An EXPAND course never gets fewer trainers than it has.
+     */
+    @Test
+    void testExpandCourseNeverGetsFewerTrainersThanItHas() throws Exception {
+        setupDistinctRolesForCourses();
+        // Course 4 is EXPAND (seats = 20, openings = 40.0 -> recommendedSeats = 40).
+        // Set current trainers to 3 and seatsPerTrainer = 50.
+        // ceil(40 / 50) = 1, but max(trainers, ceil(...)) ensures trainersNeeded is max(3, 1) = 3.
+        jdbcTemplate.update("UPDATE course_offering SET seats = 20, trainers = 3 WHERE course_id = 4 AND district_id = 1");
+
+        mockMvc.perform(get("/api/districts/1/plan").param("seatsPerTrainer", "50"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.courseId == 4)].actions", hasItem(contains("EXPAND"))))
+            .andExpect(jsonPath("$.items[?(@.courseId == 4)].recommendedSeats").value(40))
+            .andExpect(jsonPath("$.items[?(@.courseId == 4)].trainers").value(3))
+            .andExpect(jsonPath("$.items[?(@.courseId == 4)].trainersNeeded").value(3))
+            .andExpect(jsonPath("$.items[?(@.courseId == 4)].trainerChange").value(0));
+    }
+
+    /**
+     * Test 17 (d): A REDUCE course still gets ceil(recommendedSeats / seats-per-trainer).
+     */
+    @Test
+    void testReduceCourseStillGetsPlainCeil() throws Exception {
+        setupDistinctRolesForCourses();
+        // Course 1 is REDUCE (seats = 60, recommendedSeats = 21). Set trainers = 4.
+        // Plain ceil(21 / 25) = 1, so trainersNeeded = 1 and trainerChange = 1 - 4 = -3.
+        jdbcTemplate.update("UPDATE course_offering SET trainers = 4 WHERE course_id = 1 AND district_id = 1");
+
+        mockMvc.perform(get("/api/districts/1/plan"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.courseId == 1)].actions", hasItem(contains("REDUCE"))))
+            .andExpect(jsonPath("$.items[?(@.courseId == 1)].recommendedSeats").value(21))
+            .andExpect(jsonPath("$.items[?(@.courseId == 1)].trainers").value(4))
+            .andExpect(jsonPath("$.items[?(@.courseId == 1)].trainersNeeded").value(1))
+            .andExpect(jsonPath("$.items[?(@.courseId == 1)].trainerChange").value(-3));
+    }
+
+    /**
+     * Test 18 (e): Totals match the sum of the items.
+     */
+    @Test
+    void testTotalsMatchSumOfItems() throws Exception {
+        setupDistinctRolesForCourses();
+
+        mockMvc.perform(get("/api/districts/1/plan"))
+            .andExpect(status().isOk())
+            .andExpect(result -> {
+                String json = result.getResponse().getContentAsString();
+                java.util.List<Integer> seats = JsonPath.read(json, "$.items[*].seats");
+                java.util.List<Integer> recSeats = JsonPath.read(json, "$.items[*].recommendedSeats");
+                java.util.List<Integer> trainers = JsonPath.read(json, "$.items[*].trainers");
+                java.util.List<Integer> trainersNeeded = JsonPath.read(json, "$.items[*].trainersNeeded");
+                java.util.List<Integer> trainerChange = JsonPath.read(json, "$.items[*].trainerChange");
+
+                int sumSeats = seats.stream().mapToInt(Integer::intValue).sum();
+                int sumRecSeats = recSeats.stream().mapToInt(Integer::intValue).sum();
+                int sumTrainers = trainers.stream().mapToInt(Integer::intValue).sum();
+                int sumTrainersNeeded = trainersNeeded.stream().mapToInt(Integer::intValue).sum();
+                int sumTrainerChange = trainerChange.stream().mapToInt(Integer::intValue).sum();
+
+                int totalSeats = JsonPath.read(json, "$.totals.totalSeats");
+                int totalRecommendedSeats = JsonPath.read(json, "$.totals.totalRecommendedSeats");
+                int totalTrainers = JsonPath.read(json, "$.totals.totalTrainers");
+                int totalTrainersNeeded = JsonPath.read(json, "$.totals.totalTrainersNeeded");
+                int totalTrainerChange = JsonPath.read(json, "$.totals.trainerChange");
+
+                assertThat(totalSeats).isEqualTo(sumSeats);
+                assertThat(totalRecommendedSeats).isEqualTo(sumRecSeats);
+                assertThat(totalTrainers).isEqualTo(sumTrainers);
+                assertThat(totalTrainersNeeded).isEqualTo(sumTrainersNeeded);
+                assertThat(totalTrainerChange).isEqualTo(sumTrainerChange);
+                assertThat(totalTrainerChange).isEqualTo(totalTrainersNeeded - totalTrainers);
+            });
+    }
+
+    /**
+     * Test 19 (f): The JSON of a plan item contains "add" and "retire" and does NOT contain "addSkills" or "retireSkills".
+     */
+    @Test
+    void testJsonContainsAddAndRetireAndNotAddSkillsOrRetireSkills() throws Exception {
+        setupDistinctRolesForCourses();
+
+        mockMvc.perform(get("/api/districts/1/plan"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].add").exists())
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].retire").exists())
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].addSkills").doesNotExist())
+            .andExpect(jsonPath("$.items[?(@.courseId == 2)].retireSkills").doesNotExist())
+            .andExpect(result -> {
+                String content = result.getResponse().getContentAsString();
+                assertThat(content)
+                    .contains("\"add\":")
+                    .contains("\"retire\":")
+                    .doesNotContain("\"addSkills\"")
+                    .doesNotContain("\"retireSkills\"");
+            });
     }
 }

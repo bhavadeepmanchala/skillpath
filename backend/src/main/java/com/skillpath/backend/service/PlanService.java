@@ -131,8 +131,8 @@ public class PlanService {
             List<String> reasons = new ArrayList<>();
             int recommendedSeats;
             int trainersNeeded;
-            List<CourseRecommendationItem> addSkills = List.of();
-            List<CourseRecommendationItem> retireSkills = List.of();
+            List<CourseRecommendationItem> add = List.of();
+            List<CourseRecommendationItem> retire = List.of();
 
             // Rule 1: INSUFFICIENT_DATA
             if (estimatedOpenings < effectiveMinOpenings) {
@@ -167,10 +167,10 @@ public class PlanService {
                             null
                         );
                         if (recResp.add() != null) {
-                            addSkills = recResp.add();
+                            add = recResp.add();
                         }
                         if (recResp.retire() != null) {
-                            retireSkills = recResp.retire();
+                            retire = recResp.retire();
                         }
                     } catch (Exception e) {
                         // ignore recommendation failure
@@ -197,7 +197,14 @@ public class PlanService {
                     reasons.add("WITHIN_RANGE");
                 }
 
-                trainersNeeded = (int) Math.max(0, Math.ceil((double) recommendedSeats / effectiveSeatsPerTrainer));
+                if (recommendedSeats == seats) {
+                    trainersNeeded = trainers;
+                } else if (actions.contains("EXPAND")) {
+                    int calc = (int) Math.max(0, Math.ceil((double) recommendedSeats / effectiveSeatsPerTrainer));
+                    trainersNeeded = Math.max(trainers, calc);
+                } else {
+                    trainersNeeded = (int) Math.max(0, Math.ceil((double) recommendedSeats / effectiveSeatsPerTrainer));
+                }
             }
 
             int seatChange = recommendedSeats - seats;
@@ -230,8 +237,8 @@ public class PlanService {
                 seatChange,
                 trainersNeeded,
                 trainerChange,
-                addSkills,
-                retireSkills
+                add,
+                retire
             ));
         }
 

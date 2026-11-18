@@ -20,16 +20,6 @@ public record DistrictPlanCourseItem(
     @JsonProperty("seatChange") Integer seatChange,
     @JsonProperty("trainersNeeded") Integer trainersNeeded,
     @JsonProperty("trainerChange") Integer trainerChange,
-    @JsonProperty("addSkills") List<CourseRecommendationItem> addSkills,
-    @JsonProperty("retireSkills") List<CourseRecommendationItem> retireSkills
-) {
-    @JsonProperty("add")
-    public List<CourseRecommendationItem> add() {
-        return addSkills;
-    }
-
-    @JsonProperty("retire")
-    public List<CourseRecommendationItem> retire() {
-        return retireSkills;
-    }
-}
+    @JsonProperty("add") List<CourseRecommendationItem> add,
+    @JsonProperty("retire") List<CourseRecommendationItem> retire
+) {}
