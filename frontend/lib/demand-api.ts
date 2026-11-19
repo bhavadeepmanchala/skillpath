@@ -386,3 +386,124 @@ export async function fetchSkillGaps(): Promise<SkillGapItem[]> {
   }
   return res.json()
 }
+
+export interface DistrictPlanSkillRecommendation {
+  skillId: number
+  skillName: string
+  latestShare: number
+  previousShare: number
+  trend: number
+  relativeGrowth: number
+  score?: number
+  postingsLatest: number
+}
+
+export type DistrictPlanAction = "REDUCE" | "REVISE" | "EXPAND" | "KEEP"
+
+export interface DistrictPlanCourseItem {
+  courseId: number
+  courseName: string
+  seats: number
+  trainers: number
+  estimatedOpenings: number | null
+  ratio: number | null
+  coverage: number
+  keySkillTrend: number
+  oversupplied: boolean
+  obsolete: boolean
+  actions: string[]
+  reasons: string[]
+  recommendedSeats: number
+  seatChange: number
+  trainersNeeded: number
+  trainerChange: number
+  add: DistrictPlanSkillRecommendation[]
+  retire: DistrictPlanSkillRecommendation[]
+}
+
+export interface DistrictPlanCounts {
+  reduce: number
+  revise: number
+  expand: number
+  keep: number
+}
+
+export interface DistrictPlanTotals {
+  totalSeats: number
+  totalRecommendedSeats: number
+  totalTrainers: number
+  totalTrainersNeeded: number
+  trainerChange: number
+}
+
+export interface DistrictPlanConfig {
+  targetRatio: number
+  expandBelowRatio: number
+  reviseCoverageThreshold: number
+  reviseMaxSkills: number
+  seatsPerTrainer: number
+  minOpenings: number
+}
+
+export interface DistrictPlanResponse {
+  districtId: number
+  districtName: string
+  items: DistrictPlanCourseItem[]
+  counts: DistrictPlanCounts
+  totals: DistrictPlanTotals
+  synthetic: boolean
+  config: DistrictPlanConfig
+}
+
+export class DistrictPlanNotReadyError extends Error {
+  readonly status = 503
+  readonly retryAfter: number
+
+  constructor(message: string = "Data is still loading, try again shortly", retryAfter: number = 5) {
+    super(message)
+    this.name = "DistrictPlanNotReadyError"
+    this.retryAfter = retryAfter
+  }
+}
+
+export class DistrictNotFoundError extends Error {
+  readonly status = 404
+
+  constructor(message: string = "District not found") {
+    super(message)
+    this.name = "DistrictNotFoundError"
+  }
+}
+
+export async function fetchDistrictPlan(
+  districtId: number
+): Promise<DistrictPlanResponse> {
+  const url = `${BACKEND_URL}/api/districts/${districtId}/plan`
+  const res = await fetch(url, { cache: "no-store" })
+
+  if (res.status === 503) {
+    const retryAfterHeader = res.headers.get("Retry-After")
+    const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 5
+    let msg = "Data is still loading, try again shortly"
+    try {
+      const data = await res.json()
+      if (data.message) msg = data.message
+    } catch {}
+    throw new DistrictPlanNotReadyError(msg, isNaN(retryAfter) ? 5 : retryAfter)
+  }
+
+  if (res.status === 404) {
+    let msg = "District not found"
+    try {
+      const data = await res.json()
+      if (data.message) msg = data.message
+    } catch {}
+    throw new DistrictNotFoundError(msg)
+  }
+
+  if (!res.ok) {
+    throw new Error(`District plan failed with status ${res.status}`)
+  }
+
+  return res.json()
+}
