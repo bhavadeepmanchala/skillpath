@@ -273,6 +273,11 @@ export interface CourseOversupplyItem {
   oversupplyRatio: number | null
   oversupplied: boolean
   lowSample: boolean
+  obsolete?: boolean
+  coverage?: number
+  keySkillTrend?: number
+  keySkillCount?: number
+  fallingSkillCount?: number
 }
 
 export interface FlagsResponse {
@@ -282,6 +287,7 @@ export interface FlagsResponse {
   scalingFactor: number
   oversupplyThreshold: number
   minOpenings: number
+  obsoleteCoverageThreshold?: number
   items: CourseOversupplyItem[]
 }
 
@@ -576,4 +582,91 @@ export async function fetchCourseRecommendations(
 
   return res.json()
 }
+
+export interface ValidationRequest {
+  roleId: number
+  skillId: number
+  status: "CONFIRMED" | "DISPUTED" | string
+  note?: string | null
+}
+
+export interface ValidationResponse {
+  id: number
+  roleId: number
+  skillId: number
+  status: string
+  note: string | null
+  confidence: number
+}
+
+export interface ValidationSummaryItem {
+  roleId: number
+  skillId: number
+  confirmedCount: number
+  disputedCount: number
+  confidence: number
+}
+
+export class ValidationApiError extends Error {
+  status: number
+  data?: any
+
+  constructor(status: number, message: string, data?: any) {
+    super(message)
+    this.name = "ValidationApiError"
+    this.status = status
+    this.data = data
+  }
+}
+
+export async function fetchValidations(params?: {
+  roleId?: number | null
+  skillId?: number | null
+}): Promise<ValidationSummaryItem[]> {
+  const searchParams = new URLSearchParams()
+  if (params?.roleId != null) {
+    searchParams.set("role", String(params.roleId))
+  }
+  if (params?.skillId != null) {
+    searchParams.set("skill", String(params.skillId))
+  }
+  const query = searchParams.toString()
+  const url = `${BACKEND_URL}/api/validations${query ? `?${query}` : ""}`
+  const res = await fetch(url, { cache: "no-store" })
+  if (!res.ok) {
+    throw new Error(`Validations fetch failed with status ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function createValidation(
+  request: ValidationRequest
+): Promise<ValidationResponse> {
+  let res: Response
+  try {
+    res = await fetch(`${BACKEND_URL}/api/validations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    })
+  } catch (err: any) {
+    throw new ValidationApiError(0, err?.message || "Network error. Failed to reach the server.")
+  }
+
+  if (!res.ok) {
+    let msg = `Validation failed with status ${res.status}`
+    let errData: any = null
+    try {
+      errData = await res.json()
+      if (errData?.message) msg = errData.message
+      else if (errData?.error) msg = errData.error
+    } catch {}
+    throw new ValidationApiError(res.status, msg, errData)
+  }
+
+  return res.json()
+}
+
 

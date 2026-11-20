@@ -17,6 +17,7 @@ import {
   X,
   ClipboardList,
   Lightbulb,
+  CheckSquare,
 } from "lucide-react"
 import { useAuthGuard } from "@/lib/auth"
 import { ReadinessProvider } from "@/components/readiness-provider"
@@ -27,6 +28,7 @@ const navItems = [
   { name: "Workforce Skill Gaps", href: "/policy/workforce-skill-gaps", icon: GitCompare },
   { name: "Course Recommendations", href: "/policy/course-recommendations", icon: Lightbulb },
   { name: "District Plan", href: "/policy/district-plan", icon: ClipboardList },
+  { name: "Employer Validation", href: "/policy/employer-validation", icon: CheckSquare },
   { name: "Job Market Trends", href: "/policy/job-market-trends", icon: BarChart3 },
   { name: "Geographic Insights", href: "/policy/geographic-insights", icon: MapPin },
 ]

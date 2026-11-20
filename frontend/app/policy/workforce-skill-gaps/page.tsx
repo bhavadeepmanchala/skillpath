@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
+import Link from "next/link"
 import {
   Info,
   AlertTriangle,
@@ -12,6 +13,8 @@ import {
   ChevronRight,
   ShieldAlert,
   Percent,
+  AlertCircle,
+  TrendingDown,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -41,6 +44,7 @@ import {
   ErrorState,
   EmptyState,
   LowSampleBadge,
+  DeltaBadge,
   ProgressBar,
   Skeleton,
 } from "@/components/ui-kit"
@@ -558,12 +562,13 @@ export default function WorkforceSkillGapsPage() {
       >
         {flagsLoading ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <KpiCardSkeleton />
               <KpiCardSkeleton />
               <KpiCardSkeleton />
               <KpiCardSkeleton />
             </div>
-            <TableSkeleton rows={5} cols={6} />
+            <TableSkeleton rows={5} cols={9} />
           </div>
         ) : flagsError ? (
           <ErrorState message={flagsError} onRetry={loadFlags} />
@@ -575,7 +580,7 @@ export default function WorkforceSkillGapsPage() {
         ) : (
           <div className="space-y-4">
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
                 label="Pairs evaluated"
                 rawValue={sortedFlagItems.length}
@@ -588,6 +593,17 @@ export default function WorkforceSkillGapsPage() {
                 icon={ShieldAlert}
                 footnote={`Ratio > ${flags.oversupplyThreshold}x with ≥${flags.minOpenings} openings`}
                 className="border-rose-200/80 bg-rose-50/20 dark:border-rose-950 dark:bg-rose-950/10"
+              />
+              <KpiCard
+                label="Flagged obsolete"
+                rawValue={sortedFlagItems.filter((i) => i.obsolete).length}
+                icon={AlertCircle}
+                footnote={
+                  flags.obsoleteCoverageThreshold != null
+                    ? `Coverage < ${flags.obsoleteCoverageThreshold}% and negative key trend`
+                    : "Coverage below threshold and negative key trend"
+                }
+                className="border-amber-200/80 bg-amber-50/20 dark:border-amber-950 dark:bg-amber-950/10"
               />
               <KpiCard
                 label="Low sample"
@@ -610,11 +626,18 @@ export default function WorkforceSkillGapsPage() {
               <span className="mx-2 text-border">•</span>
               <span className="font-semibold text-foreground">Min openings:</span>{" "}
               {flags.minOpenings}
+              {flags.obsoleteCoverageThreshold != null && (
+                <>
+                  <span className="mx-2 text-border">•</span>
+                  <span className="font-semibold text-foreground">Obsolete coverage threshold:</span>{" "}
+                  {flags.obsoleteCoverageThreshold}%
+                </>
+              )}
             </div>
 
             {/* Oversupply Table */}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px] text-left text-xs">
+              <table className="w-full min-w-[960px] text-left text-xs">
                 <thead className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase text-[11px] tracking-wide">
                   <tr>
                     <th className="py-3 px-4 font-medium">Course</th>
@@ -622,7 +645,11 @@ export default function WorkforceSkillGapsPage() {
                     <th className="py-3 px-3 text-right font-medium">Seats</th>
                     <th className="py-3 px-3 text-right font-medium">Est. Openings</th>
                     <th className="py-3 px-3 text-right font-medium">Ratio</th>
+                    <th className="py-3 px-3 text-right font-medium">Coverage</th>
+                    <th className="py-3 px-3 text-center font-medium">Key Skill Trend</th>
+                    <th className="py-3 px-3 text-right font-medium">Key Skills</th>
                     <th className="py-3 px-4 text-center font-medium">Status</th>
+                    <th className="py-3 px-3 text-center font-medium">Recommendations</th>
                     <th className="py-3 px-3 text-right font-medium">Details</th>
                   </tr>
                 </thead>
@@ -636,6 +663,10 @@ export default function WorkforceSkillGapsPage() {
                         onClick={() => openFlagDrawer(item)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
+                            const target = e.target as HTMLElement
+                            if (target.tagName.toLowerCase() === "a" || target.closest("a")) {
+                              return
+                            }
                             e.preventDefault()
                             openFlagDrawer(item)
                           }
@@ -665,24 +696,58 @@ export default function WorkforceSkillGapsPage() {
                             ? `${item.oversupplyRatio.toFixed(2)}x`
                             : "—"}
                         </td>
+                        <td className="py-3 px-3 text-right font-mono tabular-nums text-foreground">
+                          {item.coverage != null ? `${item.coverage.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <DeltaBadge value={item.keySkillTrend ?? 0} size="sm" />
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono tabular-nums text-muted-foreground">
+                          <span title={`${item.fallingSkillCount ?? 0} falling out of ${item.keySkillCount ?? 0} key skills`}>
+                            {item.keySkillCount ?? 0}
+                            {item.fallingSkillCount != null && item.fallingSkillCount > 0 ? (
+                              <span className="text-rose-600 dark:text-rose-400 font-semibold ml-1">
+                                ({item.fallingSkillCount}↓)
+                              </span>
+                            ) : null}
+                          </span>
+                        </td>
                         <td className="py-3 px-4 text-center">
-                          {item.lowSample ? (
-                            <LowSampleBadge threshold={flags.minOpenings} />
-                          ) : item.oversupplied ? (
-                            <Badge
-                              variant="destructive"
-                              className="border border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300"
-                            >
-                              Oversupplied
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                            >
-                              OK
-                            </Badge>
-                          )}
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            {item.obsolete && (
+                              <Badge
+                                variant="destructive"
+                                className="border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                              >
+                                Obsolete
+                              </Badge>
+                            )}
+                            {item.lowSample ? (
+                              <LowSampleBadge threshold={flags.minOpenings} />
+                            ) : item.oversupplied ? (
+                              <Badge
+                                variant="destructive"
+                                className="border border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                              >
+                                Oversupplied
+                              </Badge>
+                            ) : !item.obsolete ? (
+                              <Badge
+                                variant="outline"
+                                className="border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                              >
+                                OK
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <Link
+                            href={`/policy/course-recommendations?course=${item.courseId}&district=${item.districtId}`}
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1.5 py-0.5"
+                          >
+                            <span>View recommendations</span>
+                          </Link>
                         </td>
                         <td className="py-3 px-3 text-right">
                           <span className="inline-flex items-center text-muted-foreground hover:text-foreground">
@@ -968,22 +1033,30 @@ export default function WorkforceSkillGapsPage() {
               <span className="text-xs font-medium text-muted-foreground">
                 Evaluation Verdict:
               </span>
-              {selectedFlagDrawer.lowSample ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span>Low sample (flagging suppressed)</span>
-                </span>
-              ) : selectedFlagDrawer.oversupplied ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
-                  <ShieldAlert className="h-4 w-4" />
-                  <span>Flagged Oversupplied</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Balanced Supply (OK)</span>
-                </span>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedFlagDrawer.obsolete && (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Obsolete Curriculum</span>
+                  </span>
+                )}
+                {selectedFlagDrawer.lowSample ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span>Low sample (flagging suppressed)</span>
+                  </span>
+                ) : selectedFlagDrawer.oversupplied ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                    <ShieldAlert className="h-4 w-4" />
+                    <span>Flagged Oversupplied</span>
+                  </span>
+                ) : !selectedFlagDrawer.obsolete ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Balanced Supply (OK)</span>
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             {/* Metrics Breakdown Grid */}
@@ -1043,11 +1116,44 @@ export default function WorkforceSkillGapsPage() {
                   {selectedFlagDrawer.linkedRoleCount} linked roles
                 </div>
               </div>
+
+              <div className="rounded-md border border-border p-3 space-y-1">
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
+                  <Percent className="h-3.5 w-3.5" />
+                  <span>Curriculum Coverage</span>
+                </div>
+                <div className="text-xl font-bold font-mono tabular-nums text-foreground">
+                  {selectedFlagDrawer.coverage != null
+                    ? `${selectedFlagDrawer.coverage.toFixed(1)}%`
+                    : "—"}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  Threshold: &lt; {flags?.obsoleteCoverageThreshold ?? 40.0}%
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border p-3 space-y-1">
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
+                  <TrendingDown className="h-3.5 w-3.5" />
+                  <span>Key Skill Trend</span>
+                </div>
+                <div className="pt-0.5">
+                  <DeltaBadge value={selectedFlagDrawer.keySkillTrend ?? 0} size="sm" />
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {selectedFlagDrawer.fallingSkillCount ?? 0} of {selectedFlagDrawer.keySkillCount ?? 0} skills falling
+                </div>
+              </div>
             </div>
 
             {/* Explanation Note */}
             <div className="rounded-lg border border-border bg-card p-4 space-y-2 text-xs">
               <h4 className="font-semibold text-foreground">Policy Analysis</h4>
+              {selectedFlagDrawer.obsolete && (
+                <p className="text-amber-800 dark:text-amber-300 bg-amber-500/10 p-2.5 rounded border border-amber-500/20 leading-relaxed">
+                  Curriculum coverage ({selectedFlagDrawer.coverage != null ? `${selectedFlagDrawer.coverage.toFixed(1)}%` : "0%"}) is below the {flags?.obsoleteCoverageThreshold ?? 40}% threshold, and key taught skills contract at an average rate of {((selectedFlagDrawer.keySkillTrend ?? 0) * 100).toFixed(1)} pp. {selectedFlagDrawer.fallingSkillCount ?? 0} of {selectedFlagDrawer.keySkillCount ?? 0} key skills show declining employer hiring demand.
+                </p>
+              )}
               <p className="text-muted-foreground leading-relaxed">
                 {selectedFlagDrawer.lowSample
                   ? `Estimated openings (${selectedFlagDrawer.estimatedOpenings?.toFixed(1) ?? 0}) are below the minimum threshold of ${flags?.minOpenings ?? 20}. To avoid policy distortion from small district sample sizes, this offering is not flagged as oversupplied.`
@@ -1058,6 +1164,15 @@ export default function WorkforceSkillGapsPage() {
               <p className="text-[11px] text-muted-foreground italic pt-1 border-t border-border/40">
                 Calculation: estimatedOpenings = postingsInWindow × scalingFactor ({flags?.scalingFactor ?? 1.0}). Assumes 1 job posting = 1 opening.
               </p>
+              <div className="pt-2">
+                <Link
+                  href={`/policy/course-recommendations?course=${selectedFlagDrawer.courseId}&district=${selectedFlagDrawer.districtId}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                >
+                  <span>View recommendations</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
             </div>
           </div>
         )}

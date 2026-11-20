@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
+import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import {
   Lightbulb,
   PlusCircle,
@@ -43,7 +44,12 @@ import {
   DataBadge,
 } from "@/components/ui-kit"
 
-export default function CourseRecommendationsPage() {
+function CourseRecommendationsContent() {
+  const searchParams = useSearchParams()
+  const courseParam = searchParams.get("course")
+  const districtParam = searchParams.get("district")
+  const initializedFromParams = useRef(false)
+
   // ---------------------------------------------------------------------------
   // Filters State: Courses & Districts
   // ---------------------------------------------------------------------------
@@ -101,6 +107,23 @@ export default function CourseRecommendationsPage() {
           a.name.localeCompare(b.name)
         )
         setDistricts(sortedDistricts)
+
+        // Preselect filters on first load if query params are present and valid
+        if (!initializedFromParams.current) {
+          initializedFromParams.current = true
+          if (courseParam) {
+            const courseFound = sortedCourses.find((c) => String(c.id) === courseParam)
+            if (courseFound) {
+              setSelectedCourseId(String(courseFound.id))
+            }
+          }
+          if (districtParam) {
+            const districtFound = sortedDistricts.find((d) => String(d.districtId) === districtParam)
+            if (districtFound) {
+              setSelectedDistrictId(String(districtFound.districtId))
+            }
+          }
+        }
       } catch {
         if (!isMounted) return
         setCoursesError("Failed to load course or district catalog. Is the backend running?")
@@ -117,7 +140,7 @@ export default function CourseRecommendationsPage() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [courseParam, districtParam])
 
   // ---------------------------------------------------------------------------
   // 2. Load Recommendations with Cache & Stale Request Cancellation
@@ -736,3 +759,19 @@ export default function CourseRecommendationsPage() {
     </div>
   )
 }
+
+export default function CourseRecommendationsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-6 space-y-6">
+          <KpiCardSkeleton />
+          <TableSkeleton rows={5} cols={5} />
+        </div>
+      }
+    >
+      <CourseRecommendationsContent />
+    </Suspense>
+  )
+}
+
