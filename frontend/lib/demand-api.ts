@@ -507,3 +507,73 @@ export async function fetchDistrictPlan(
 
   return res.json()
 }
+
+export interface CourseRecommendationItem {
+  skillId: number
+  skillName: string
+  latestShare: number
+  previousShare: number
+  trend: number
+  relativeGrowth: number
+  score?: number | null
+  postingsLatest: number
+}
+
+export interface CourseRecommendationsResponse {
+  courseId: number
+  courseName: string
+  districtId: number | null
+  latestWindow: TrendWindowRange | null
+  previousWindow: TrendWindowRange | null
+  maxItems: number
+  minShareForAdd: number
+  retireMinDecline: number
+  retireMaxShare: number
+  minPostings: number
+  windowMonths: number
+  add: CourseRecommendationItem[]
+  retire: CourseRecommendationItem[]
+}
+
+export class CourseRecommendationNotFoundError extends Error {
+  readonly status = 404
+
+  constructor(message: string = "Course or district not found") {
+    super(message)
+    this.name = "CourseRecommendationNotFoundError"
+  }
+}
+
+export async function fetchCourseRecommendations(
+  courseId: number,
+  districtId?: number | null
+): Promise<CourseRecommendationsResponse> {
+  const searchParams = new URLSearchParams()
+  if (districtId != null) {
+    searchParams.set("district", String(districtId))
+  }
+  const query = searchParams.toString()
+  const url = `${BACKEND_URL}/api/courses/${courseId}/recommendations${
+    query ? `?${query}` : ""
+  }`
+  const res = await fetch(url, { cache: "no-store" })
+
+  if (res.status === 404) {
+    let msg = "Course or district not found"
+    try {
+      const data = await res.json()
+      if (data.message) msg = data.message
+      else if (data.error) msg = data.error
+    } catch {}
+    throw new CourseRecommendationNotFoundError(msg)
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `Course recommendations for course ${courseId} failed with status ${res.status}`
+    )
+  }
+
+  return res.json()
+}
+
