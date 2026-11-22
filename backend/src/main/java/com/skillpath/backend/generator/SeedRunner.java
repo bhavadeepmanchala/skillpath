@@ -58,6 +58,7 @@ public class SeedRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) throws Exception {
         String productName = "Unknown";
         boolean isH2Mem = false;
+        boolean isPostgres = false;
 
         try (Connection connection = dataSource.getConnection()) {
             DatabaseMetaData metaData = connection.getMetaData();
@@ -65,6 +66,9 @@ public class SeedRunner implements ApplicationRunner {
             String url = metaData.getURL();
             if (productName != null && productName.equalsIgnoreCase("H2") && url != null && url.contains(":mem:")) {
                 isH2Mem = true;
+            }
+            if (productName != null && productName.equalsIgnoreCase("PostgreSQL")) {
+                isPostgres = true;
             }
         }
 
@@ -82,8 +86,8 @@ public class SeedRunner implements ApplicationRunner {
         }
 
         try {
-            if (isDatabasePopulated()) {
-                log.info("Database tables are not empty; skipping synthetic data seeding.");
+            if (isDatabasePopulated(isH2Mem)) {
+                log.info("Database tables are populated; skipping synthetic data seeding.");
                 if (oversupplyService != null) {
                     oversupplyService.clearCache();
                     try {
@@ -96,9 +100,15 @@ public class SeedRunner implements ApplicationRunner {
                 return;
             }
 
-            jdbcTemplate.execute("DELETE FROM employer_validation");
+            if (isH2Mem) {
+                jdbcTemplate.execute("DELETE FROM employer_validation");
+            }
             dataGenerator.run();
             courseGenerator.run();
+
+            if (isPostgres) {
+                syncPostgresSequences();
+            }
 
             long skillCount = queryCount("skill");
             long skillAliasCount = queryCount("skill_alias");
@@ -140,8 +150,40 @@ public class SeedRunner implements ApplicationRunner {
         }
     }
 
-    private boolean isDatabasePopulated() {
-        return queryCount("job_posting") > 0 || queryCount("demand_monthly") > 0;
+    private void syncPostgresSequences() {
+        java.util.List<String> identityTables = java.util.List.of(
+            "skill", "role", "district", "job_posting", "course",
+            "employer_validation", "training_plan"
+        );
+        for (String table : identityTables) {
+            try {
+                String sql = String.format(
+                    "SELECT setval(pg_get_serial_sequence('%s', 'id'), GREATEST(COALESCE(MAX(id), 0), 1), (MAX(id) IS NOT NULL)) FROM %s",
+                    table, table
+                );
+                jdbcTemplate.queryForObject(sql, Long.class);
+                log.debug("Synchronized identity sequence for table: {}", table);
+            } catch (Exception e) {
+                log.warn("Could not synchronize identity sequence for table {}: {}", table, e.getMessage());
+            }
+        }
+        log.info("PostgreSQL identity sequences synchronized for explicit ID tables.");
+    }
+
+    /**
+     * Safe population check: Verifies all key tables are populated to expected thresholds.
+     * Prevents an aborted seed run from falsely masquerading as a complete dataset on persistent databases.
+     * For in-memory H2 (used in dev and tests with small synthetic slices), any existing data is respected.
+     */
+    private boolean isDatabasePopulated(boolean isH2Mem) {
+        if (isH2Mem) {
+            return queryCount("job_posting") > 0 || queryCount("demand_monthly") > 0;
+        }
+        return queryCount("job_posting") >= 40000
+            && queryCount("posting_skill") >= 284000
+            && queryCount("demand_monthly") >= 128000
+            && queryCount("course") >= 24
+            && queryCount("course_offering") >= 190;
     }
 
     private long queryCount(String tableName) {

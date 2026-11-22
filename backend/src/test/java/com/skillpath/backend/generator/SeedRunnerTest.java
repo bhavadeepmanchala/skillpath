@@ -68,11 +68,60 @@ class SeedRunnerTest {
     @Test
     void whenTablesNotEmpty_skipsSeedingAndSetsReady() throws Exception {
         when(jdbcTemplate.queryForObject(eq("SELECT COUNT(*) FROM job_posting"), eq(Long.class))).thenReturn(40000L);
+        when(jdbcTemplate.queryForObject(eq("SELECT COUNT(*) FROM posting_skill"), eq(Long.class))).thenReturn(284188L);
+        when(jdbcTemplate.queryForObject(eq("SELECT COUNT(*) FROM demand_monthly"), eq(Long.class))).thenReturn(128205L);
+        when(jdbcTemplate.queryForObject(eq("SELECT COUNT(*) FROM course"), eq(Long.class))).thenReturn(24L);
+        when(jdbcTemplate.queryForObject(eq("SELECT COUNT(*) FROM course_offering"), eq(Long.class))).thenReturn(190L);
 
         seedRunner.run(new DefaultApplicationArguments());
 
         verify(dataGenerator, never()).run();
         verify(courseGenerator, never()).run();
+        assertThat(seedStatus.getPhase()).isEqualTo(SeedStatus.PHASE_READY);
+    }
+
+    @Test
+    void whenTablesPartiallyPopulated_doesNotSkipSeeding() throws Exception {
+        Connection connection = mock(Connection.class);
+        DatabaseMetaData metaData = mock(DatabaseMetaData.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.getMetaData()).thenReturn(metaData);
+        when(metaData.getDatabaseProductName()).thenReturn("PostgreSQL");
+        when(metaData.getURL()).thenReturn("jdbc:postgresql://ep-example.neon.tech/neondb");
+
+        SeedRunner pgRunner = new SeedRunner(dataGenerator, courseGenerator, dataSource, jdbcTemplate, seedStatus);
+
+        // Only job_posting is populated, but other tables are empty (aborted previous seed)
+        when(jdbcTemplate.queryForObject(eq("SELECT COUNT(*) FROM job_posting"), eq(Long.class))).thenReturn(40000L);
+        when(jdbcTemplate.queryForObject(eq("SELECT COUNT(*) FROM posting_skill"), eq(Long.class))).thenReturn(0L);
+
+        // DataGenerator.run() will be attempted and in a real scenario fails safely with IllegalStateException
+        pgRunner.run(new DefaultApplicationArguments());
+
+        verify(dataGenerator).run();
+    }
+
+    @Test
+    void whenPostgres_preservesEmployerValidationsAndSyncsSequences() throws Exception {
+        Connection connection = mock(Connection.class);
+        DatabaseMetaData metaData = mock(DatabaseMetaData.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.getMetaData()).thenReturn(metaData);
+        when(metaData.getDatabaseProductName()).thenReturn("PostgreSQL");
+        when(metaData.getURL()).thenReturn("jdbc:postgresql://ep-example.neon.tech/neondb");
+
+        SeedRunner pgRunner = new SeedRunner(dataGenerator, courseGenerator, dataSource, jdbcTemplate, seedStatus);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class))).thenReturn(0L);
+
+        pgRunner.run(new DefaultApplicationArguments());
+
+        // Verifies DELETE FROM employer_validation was NEVER called on Postgres
+        verify(jdbcTemplate, never()).execute("DELETE FROM employer_validation");
+        // Verifies sequences were synced
+        verify(jdbcTemplate).queryForObject(
+            org.mockito.ArgumentMatchers.contains("pg_get_serial_sequence('job_posting'"),
+            eq(Long.class)
+        );
         assertThat(seedStatus.getPhase()).isEqualTo(SeedStatus.PHASE_READY);
     }
 
