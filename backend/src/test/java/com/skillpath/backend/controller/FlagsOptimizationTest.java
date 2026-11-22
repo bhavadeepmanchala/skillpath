@@ -75,6 +75,7 @@ class FlagsOptimizationTest {
     @AfterEach
     void tearDown() {
         oversupplyService.clearCache();
+        seedStatus.setPhase(seedStatus.isSeedProfileActive() ? SeedStatus.PHASE_SEEDING : SeedStatus.PHASE_EMPTY);
         cleanTables();
     }
 

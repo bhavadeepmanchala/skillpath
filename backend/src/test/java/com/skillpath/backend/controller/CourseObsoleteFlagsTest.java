@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.skillpath.backend.service.OversupplyService;
+import com.skillpath.backend.service.SeedStatus;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
@@ -27,6 +29,12 @@ class CourseObsoleteFlagsTest {
     private FlagController flagController;
 
     @Autowired
+    private OversupplyService oversupplyService;
+
+    @Autowired
+    private SeedStatus seedStatus;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private MockMvc mockMvc;
@@ -34,6 +42,8 @@ class CourseObsoleteFlagsTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(flagController).build();
+        oversupplyService.clearCache();
+        seedStatus.setPhase(seedStatus.isSeedProfileActive() ? SeedStatus.PHASE_SEEDING : SeedStatus.PHASE_EMPTY);
         cleanTables();
         seedHandBuiltDataset();
     }
@@ -41,6 +51,8 @@ class CourseObsoleteFlagsTest {
     @AfterEach
     void tearDown() {
         cleanTables();
+        oversupplyService.clearCache();
+        seedStatus.setPhase(seedStatus.isSeedProfileActive() ? SeedStatus.PHASE_SEEDING : SeedStatus.PHASE_EMPTY);
     }
 
     private static Matcher<Object> closeToDouble(double expected, double tolerance) {
