@@ -1,9 +1,15 @@
 import React from "react"
 
-export function Skeleton({ className = "" }: { className?: string }) {
+export interface SkeletonProps {
+  className?: string
+  as?: "div" | "span"
+}
+
+export function Skeleton({ className = "", as = "div" }: SkeletonProps) {
+  const Component = as
   return (
-    <div
-      className={`animate-pulse rounded bg-muted/70 ${className}`}
+    <Component
+      className={`animate-pulse rounded bg-muted/70 ${as === "span" ? "inline-block" : ""} ${className}`}
       aria-hidden="true"
     />
   )

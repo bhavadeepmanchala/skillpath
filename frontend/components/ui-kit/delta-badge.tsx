@@ -25,14 +25,18 @@ export function DeltaBadge({
   if (isRising) {
     return (
       <span
-        className={`inline-flex items-center gap-1 font-mono font-medium rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 ${
+        className={`inline-flex items-center gap-1 font-mono font-medium rounded border border-positive/30 bg-positive-subtle text-positive-foreground tabular-nums ${
           size === "sm" ? "px-1.5 py-0.5 text-[11px]" : "px-2 py-0.5 text-xs"
         }`}
         title={`Rising by ${formatted}`}
       >
-        <TrendingUp className="h-3 w-3 shrink-0 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
+        <TrendingUp className="h-3 w-3 shrink-0 text-positive" aria-hidden="true" />
         <span>{formatted}</span>
-        {showLabel && <span className="text-[10px] font-sans uppercase tracking-wider ml-0.5">rising</span>}
+        {showLabel && (
+          <span className="text-[10px] font-sans uppercase tracking-wider ml-0.5">
+            rising
+          </span>
+        )}
         <span className="sr-only">Rising</span>
       </span>
     )
@@ -41,14 +45,18 @@ export function DeltaBadge({
   if (isDeclining) {
     return (
       <span
-        className={`inline-flex items-center gap-1 font-mono font-medium rounded border border-rose-500/30 bg-rose-500/10 text-rose-800 dark:text-rose-300 ${
+        className={`inline-flex items-center gap-1 font-mono font-medium rounded border border-negative/30 bg-negative-subtle text-negative-foreground tabular-nums ${
           size === "sm" ? "px-1.5 py-0.5 text-[11px]" : "px-2 py-0.5 text-xs"
         }`}
         title={`Declining by ${formatted}`}
       >
-        <TrendingDown className="h-3 w-3 shrink-0 text-rose-700 dark:text-rose-300" aria-hidden="true" />
+        <TrendingDown className="h-3 w-3 shrink-0 text-negative" aria-hidden="true" />
         <span>{formatted}</span>
-        {showLabel && <span className="text-[10px] font-sans uppercase tracking-wider ml-0.5">declining</span>}
+        {showLabel && (
+          <span className="text-[10px] font-sans uppercase tracking-wider ml-0.5">
+            declining
+          </span>
+        )}
         <span className="sr-only">Declining</span>
       </span>
     )
@@ -56,14 +64,18 @@ export function DeltaBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 font-mono font-medium rounded border border-border bg-muted/60 text-muted-foreground ${
+      className={`inline-flex items-center gap-1 font-mono font-medium rounded border border-border bg-muted/60 text-muted-foreground tabular-nums ${
         size === "sm" ? "px-1.5 py-0.5 text-[11px]" : "px-2 py-0.5 text-xs"
       }`}
       title="Steady / no significant change"
     >
       <Minus className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span>0.0 pp</span>
-      {showLabel && <span className="text-[10px] font-sans uppercase tracking-wider ml-0.5">steady</span>}
+      {showLabel && (
+        <span className="text-[10px] font-sans uppercase tracking-wider ml-0.5">
+          steady
+        </span>
+      )}
       <span className="sr-only">Steady</span>
     </span>
   )

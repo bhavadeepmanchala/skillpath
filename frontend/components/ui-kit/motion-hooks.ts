@@ -20,17 +20,37 @@ export function usePrefersReducedMotion(): boolean {
   return prefersReducedMotion
 }
 
-export function useCountUp(target: number, durationMs = 500, enabled = true): number {
+/**
+ * Counts up from 0 on first view and smoothly tweens from the previous
+ * displayed value whenever `target` changes (e.g. on filter updates).
+ * Honours `prefers-reduced-motion` with instant updates.
+ */
+export function useCountUp(
+  target: number,
+  durationMs = 500,
+  enabled = true
+): number {
   const reducedMotion = usePrefersReducedMotion()
-  const [current, setCurrent] = useState(() => (reducedMotion || !enabled ? target : 0))
+  const [current, setCurrent] = useState(() =>
+    reducedMotion || !enabled ? target : 0
+  )
+  const previousRef = useRef<number>(reducedMotion || !enabled ? target : 0)
 
   useEffect(() => {
     if (!enabled) {
+      previousRef.current = 0
       setCurrent(0)
       return
     }
 
     if (reducedMotion || durationMs <= 0 || isNaN(target)) {
+      previousRef.current = target
+      setCurrent(target)
+      return
+    }
+
+    const from = previousRef.current
+    if (from === target) {
       setCurrent(target)
       return
     }
@@ -42,11 +62,14 @@ export function useCountUp(target: number, durationMs = 500, enabled = true): nu
       if (!startTime) startTime = timestamp
       const progress = Math.min((timestamp - startTime) / durationMs, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
-      setCurrent(Math.round(eased * target))
+      const nextVal = Math.round(from + (target - from) * eased)
+      previousRef.current = nextVal
+      setCurrent(nextVal)
 
       if (progress < 1) {
         animId = requestAnimationFrame(step)
       } else {
+        previousRef.current = target
         setCurrent(target)
       }
     }

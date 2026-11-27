@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
+import Link from "next/link"
 import {
   Info,
   BookOpen,
@@ -12,10 +13,12 @@ import {
   RefreshCw,
   TrendingUp,
   TrendingDown,
-  Minus,
+  AlertTriangle,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
+  ShieldAlert,
+  ArrowRight,
+  Settings,
 } from "lucide-react"
 import {
   fetchDistricts,
@@ -25,37 +28,70 @@ import {
   type DistrictDemandItem,
   type DistrictPlanResponse,
   type DistrictPlanCourseItem,
+  type DistrictPlanAction,
 } from "@/lib/demand-api"
 import {
   PageHeader,
-  SectionCard,
+  FindingHeadline,
+  BigNumber,
+  FigureRow,
+  SectionHeader,
+  SourceCaption,
   FilterBar,
   SelectField,
-  KpiCard,
-  TableSkeleton,
+  DumbbellRow,
+  DumbbellScaleHeader,
+  DeltaBadge,
   Drawer,
   ErrorState,
   EmptyState,
   Skeleton,
 } from "@/components/ui-kit"
+import { computeDumbbellScale } from "@/lib/dumbbell"
+import {
+  formatPercent,
+  formatInteger,
+  pluralize,
+} from "@/lib/findings"
 
 function formatReason(reason: string): string {
   switch (reason) {
     case "OVERSUPPLIED":
-      return "Oversupplied"
+      return "Oversupplied capacity"
     case "OBSOLETE":
-      return "Obsolete"
+      return "Obsolete curriculum"
     case "LOW_COVERAGE":
-      return "Low coverage"
+      return "Low demand coverage"
     case "UNDER_SUPPLIED":
-      return "Under-supplied"
+      return "Under-supplied capacity"
     case "INSUFFICIENT_DATA":
-      return "Not enough data"
+      return "Not enough local data"
     case "WITHIN_RANGE":
-      return "Within range"
+      return "Balanced within target range"
     default:
       return reason.replace(/_/g, " ").toLowerCase()
   }
+}
+
+function getCoursePlainReason(item: DistrictPlanCourseItem): string {
+  if (item.reasons.length === 1 && item.reasons[0] === "INSUFFICIENT_DATA") {
+    return "Fewer than 20 estimated local openings; sample too small to recommend quota changes."
+  }
+  if (item.actions.includes("REDUCE")) {
+    const ratioStr = item.ratio != null ? `${item.ratio.toFixed(1)}x` : "high"
+    return `Oversupplied: seats exceed local employer hiring openings by ${ratioStr}.`
+  }
+  if (item.actions.includes("REVISE")) {
+    if (item.obsolete) {
+      return `Obsolete curriculum: ${item.coverage.toFixed(0)}% coverage and falling demand in taught skills.`
+    }
+    return `Low alignment: ${item.coverage.toFixed(0)}% coverage of core local skill requirements.`
+  }
+  if (item.actions.includes("EXPAND")) {
+    const ratioStr = item.ratio != null ? `${item.ratio.toFixed(1)}x` : "low"
+    return `High demand: local employer openings exceed seat capacity (${ratioStr} ratio).`
+  }
+  return "Well-balanced: training seats align with local employer hiring."
 }
 
 function ActionBadge({
@@ -67,8 +103,9 @@ function ActionBadge({
 }) {
   if (isOnlyInsufficientData) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
-        Not enough data
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border border-attention/30 bg-attention-subtle text-attention-foreground">
+        <AlertTriangle className="h-3 w-3 text-attention" aria-hidden="true" />
+        <span>Not enough data</span>
       </span>
     )
   }
@@ -76,27 +113,31 @@ function ActionBadge({
   switch (action) {
     case "REDUCE":
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border border-rose-500/30 bg-rose-500/10 text-rose-800 dark:text-rose-300">
-          REDUCE
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border border-negative/30 bg-negative-subtle text-negative-foreground uppercase tracking-wide">
+          <TrendingDown className="h-3 w-3 text-negative" aria-hidden="true" />
+          <span>REDUCE</span>
         </span>
       )
     case "REVISE":
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
-          REVISE
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border border-attention/30 bg-attention-subtle text-attention-foreground uppercase tracking-wide">
+          <AlertTriangle className="h-3 w-3 text-attention" aria-hidden="true" />
+          <span>REVISE</span>
         </span>
       )
     case "EXPAND":
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border border-sky-500/30 bg-sky-500/10 text-sky-800 dark:text-sky-300">
-          EXPAND
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border border-positive/30 bg-positive-subtle text-positive-foreground uppercase tracking-wide">
+          <TrendingUp className="h-3 w-3 text-positive" aria-hidden="true" />
+          <span>EXPAND</span>
         </span>
       )
     case "KEEP":
     default:
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300">
-          KEEP
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border border-border bg-muted/60 text-muted-foreground uppercase tracking-wide">
+          <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+          <span>KEEP</span>
         </span>
       )
   }
@@ -150,7 +191,7 @@ export default function DistrictPlanPage() {
 
   // District options sorted alphabetically (no national option)
   const districtOptions = useMemo(() => {
-    const opts = [{ label: "Select a district...", value: "" }]
+    const opts = [{ label: "Select a district to view plan...", value: "" }]
     const sorted = [...districts].sort((a, b) => a.name.localeCompare(b.name))
     for (const d of sorted) {
       opts.push({
@@ -169,7 +210,6 @@ export default function DistrictPlanPage() {
     }
   }, [])
 
-  // Clean up timer on unmount
   useEffect(() => {
     return () => {
       clearRetryTimer()
@@ -191,7 +231,6 @@ export default function DistrictPlanPage() {
         return
       }
 
-      // Check cache first (unless forced)
       if (!forceRefetch && planCache[districtIdStr]) {
         setPlan(planCache[districtIdStr])
         setError(null)
@@ -261,7 +300,6 @@ export default function DistrictPlanPage() {
     [clearRetryTimer, planCache]
   )
 
-  // Trigger load when selectedDistrictId changes
   useEffect(() => {
     loadPlan(selectedDistrictId)
   }, [selectedDistrictId, loadPlan])
@@ -287,32 +325,63 @@ export default function DistrictPlanPage() {
     setIsDrawerOpen(false)
   }
 
+  // Sorted course cards: "actions that need attention come first"
+  const sortedCourseCards = useMemo(() => {
+    if (!plan?.items) return []
+    return [...plan.items].sort((a, b) => {
+      // Priority weighting: REDUCE = 5, REVISE = 4, EXPAND = 3, KEEP = 2, INSUFFICIENT_DATA = 1
+      const getPriority = (item: DistrictPlanCourseItem) => {
+        if (item.reasons.length === 1 && item.reasons[0] === "INSUFFICIENT_DATA") return 1
+        if (item.actions.includes("REDUCE")) return 5
+        if (item.actions.includes("REVISE")) return 4
+        if (item.actions.includes("EXPAND")) return 3
+        return 2
+      }
+
+      const pA = getPriority(a)
+      const pB = getPriority(b)
+      if (pB !== pA) return pB - pA
+
+      // Secondary: absolute seat change descending
+      return Math.abs(b.seatChange) - Math.abs(a.seatChange)
+    })
+  }, [plan])
+
+  // Finding sentence calculation
+  const findingHeadline = useMemo(() => {
+    if (!plan) {
+      return "Select a district to generate localized course quota and staffing allocations."
+    }
+    const attentionCount = plan.counts.reduce + plan.counts.revise
+    if (attentionCount > 0) {
+      return `${plan.districtName} plan recommends action on ${pluralize(
+        attentionCount,
+        "course"
+      )} (${plan.counts.reduce} reduce, ${plan.counts.revise} revise) to align with local hiring.`
+    }
+    if (plan.counts.expand > 0) {
+      return `${plan.districtName} plan identifies capacity deficits in ${pluralize(
+        plan.counts.expand,
+        "course"
+      )} with local hiring expansion opportunities.`
+    }
+    return `${plan.districtName} training capacity is well-aligned with local employer demand across all ${plan.items.length} offered courses.`
+  }, [plan])
+
   return (
-    <div className="space-y-6 animate-page-enter">
-      {/* Page Header */}
+    <div className="space-y-8 animate-page-enter">
+      {/* 1. Page Header with standfirst */}
       <PageHeader
         title="District Training Plan"
-        description="Review deterministic seat capacity recommendations, staffing allocations, and curriculum update guidance for local course offerings."
-        showSyntheticBadge={true}
+        standfirst="Deterministic seat quotas, staffing allocations, and curriculum revisions tailored to local employer hiring."
+        showSyntheticBadge
         breadcrumbs={[
           { label: "Policymaker", href: "/policy" },
           { label: "District Plan" },
         ]}
       />
 
-      {/* Synthetic Data Notice Banner */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-sky-300/60 bg-sky-50/70 p-3 text-xs text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200 shadow-resting">
-        <div className="flex items-center gap-1.5 font-medium">
-          <Info className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
-          <span>Training and staffing recommendations for offered courses</span>
-        </div>
-        <span className="text-sky-400 dark:text-sky-700 hidden sm:inline">•</span>
-        <div className="text-muted-foreground dark:text-sky-300/80">
-          All data is synthetic and deterministic.
-        </div>
-      </div>
-
-      {/* District Selector Filter Bar */}
+      {/* 2. Filter Bar: District Selector */}
       <FilterBar onReset={() => handleDistrictChange("")} isFiltered={selectedDistrictId !== ""}>
         <SelectField
           id="district-plan-selector"
@@ -321,15 +390,16 @@ export default function DistrictPlanPage() {
           disabled={districtsLoading}
           onChange={handleDistrictChange}
           options={districtOptions}
+          className="w-full sm:w-auto sm:min-w-[260px]"
         />
       </FilterBar>
 
       {/* 503 Retrying Notification Banner */}
       {isRetrying && (
-        <div className="flex items-center justify-between gap-3 p-3.5 rounded-lg border border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200 text-xs shadow-resting animate-pulse">
+        <div className="flex items-center justify-between gap-3 p-3.5 rounded-lg border border-attention/30 bg-attention-subtle text-attention-foreground text-xs shadow-resting animate-pulse">
           <div className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4 animate-spin shrink-0 text-amber-600 dark:text-amber-400" />
-            <span className="font-medium">
+            <RefreshCw className="h-4 w-4 animate-spin shrink-0 text-attention" aria-hidden="true" />
+            <span className="font-semibold">
               Data is still loading, retrying... (attempt {retryAttempt} of 6)
             </span>
           </div>
@@ -337,363 +407,261 @@ export default function DistrictPlanPage() {
         </div>
       )}
 
-      {/* Main Content Area */}
-      {!selectedDistrictId ? (
-        <EmptyState
-          icon={MapPin}
-          title="Select a district"
-          description="Choose a district from the dropdown above to view its course capacity recommendations, staffing allocations, and curriculum revision guidance."
-        />
-      ) : loading && !isRetrying ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Skeleton className="h-28 rounded-lg" />
-            <Skeleton className="h-28 rounded-lg" />
-            <Skeleton className="h-28 rounded-lg" />
-            <Skeleton className="h-28 rounded-lg" />
+      {/* 3. Empty State before district selection */}
+      {!selectedDistrictId && (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card p-12 text-center text-card-foreground shadow-resting">
+          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <MapPin className="h-6 w-6" aria-hidden="true" />
           </div>
-          <TableSkeleton rows={5} cols={8} />
+          <h3 className="font-serif text-lg font-semibold text-foreground">
+            Select a district to view localized training plan
+          </h3>
+          <p className="mt-1.5 max-w-[65ch] text-xs leading-relaxed text-muted-foreground">
+            Choose a reporting district from the dropdown above to review course seat capacity
+            recommendations, trainer staffing adjustments, and curriculum revisions calculated
+            directly from local employer hiring postings.
+          </p>
         </div>
-      ) : isNotFound ? (
+      )}
+
+      {/* Loading Skeletons */}
+      {selectedDistrictId && loading && !isRetrying && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-lg border border-border bg-card space-y-4">
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-4 w-1/3" />
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 pt-4 border-t border-border">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-8 w-24" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+          </div>
+        </div>
+      )}
+
+      {/* 404 State */}
+      {isNotFound && (
         <ErrorState
           message="District not found"
           description="The requested district was not found in the reference catalog."
           onRetry={handleManualRetry}
         />
-      ) : error ? (
+      )}
+
+      {/* Error State */}
+      {error && (
         <ErrorState
           message={error}
           description="Could not load the district plan."
           onRetry={handleManualRetry}
         />
-      ) : plan ? (
-        <div className="space-y-6">
-          {/* Summary Row (4 Cards) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Card 1: Number of courses */}
-            <KpiCard
-              label="Offered Courses"
-              rawValue={plan.items.length}
-              footnote={`In ${plan.districtName}`}
-              icon={BookOpen}
-              staggerIndex={0}
+      )}
+
+      {/* Content State when district plan is loaded */}
+      {plan && !loading && !error && (
+        <div className="space-y-8">
+          {/* Finding Headline & Open FigureRow */}
+          <section className="space-y-6">
+            <FindingHeadline
+              kicker="District Training Plan Finding"
+              sentence={findingHeadline}
+            >
+              <SourceCaption
+                scope={plan.districtName}
+                window="12-month trailing hiring window"
+                note="Deterministic plan calculated against local synthetic job postings"
+              />
+            </FindingHeadline>
+
+            <FigureRow columns={3}>
+              <BigNumber
+                label="Offered Courses"
+                rawValue={plan.items.length}
+                footnote={`In ${plan.districtName}`}
+              />
+
+              <BigNumber
+                label="Seat Capacity"
+                value={`${formatInteger(plan.totals.totalSeats)} → ${formatInteger(plan.totals.totalRecommendedSeats)}`}
+                footnote={`${plan.totals.totalRecommendedSeats - plan.totals.totalSeats >= 0 ? "+" : ""}${plan.totals.totalRecommendedSeats - plan.totals.totalSeats} seats (${
+                  plan.totals.totalRecommendedSeats - plan.totals.totalSeats < 0
+                    ? "Reduction"
+                    : plan.totals.totalRecommendedSeats - plan.totals.totalSeats > 0
+                    ? "Expansion"
+                    : "Balanced"
+                })`}
+              />
+
+              <BigNumber
+                label="Trainer Staffing"
+                value={`${plan.totals.totalTrainers} → ${plan.totals.totalTrainersNeeded}`}
+                footnote={`${plan.totals.trainerChange >= 0 ? "+" : ""}${plan.totals.trainerChange} trainers (${
+                  plan.totals.trainerChange < 0
+                    ? "Surplus"
+                    : plan.totals.trainerChange > 0
+                    ? "Additional"
+                    : "Balanced"
+                })`}
+              />
+            </FigureRow>
+
+            {/* Recommended Actions: four small labelled counts in one row on desktop, stacking cleanly at 375px */}
+            {(() => {
+              const insufficientDataCount = plan.items.filter(
+                (item) => item.reasons.length === 1 && item.reasons[0] === "INSUFFICIENT_DATA"
+              ).length
+              return (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
+                    Recommended Actions
+                  </span>
+                  <div className="flex flex-wrap lg:flex-nowrap items-center gap-2.5">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border border-attention/30 bg-attention-subtle text-attention-foreground whitespace-nowrap">
+                      <AlertTriangle className="h-3.5 w-3.5 text-attention shrink-0" aria-hidden="true" />
+                      <span>Revise</span>
+                      <span className="font-mono tabular-nums font-bold">{plan.counts.revise}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border border-negative/30 bg-negative-subtle text-negative-foreground whitespace-nowrap">
+                      <TrendingDown className="h-3.5 w-3.5 text-negative shrink-0" aria-hidden="true" />
+                      <span>Reduce</span>
+                      <span className="font-mono tabular-nums font-bold">{plan.counts.reduce}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border border-positive/30 bg-positive-subtle text-positive-foreground whitespace-nowrap">
+                      <TrendingUp className="h-3.5 w-3.5 text-positive shrink-0" aria-hidden="true" />
+                      <span>Expand</span>
+                      <span className="font-mono tabular-nums font-bold">{plan.counts.expand}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-border bg-muted/60 text-muted-foreground whitespace-nowrap">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>Keep</span>
+                      <span className="font-mono tabular-nums font-bold text-foreground">{plan.counts.keep}</span>
+                    </span>
+                    {insufficientDataCount > 0 && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border border-attention/30 bg-attention-subtle text-attention-foreground whitespace-nowrap">
+                        <AlertTriangle className="h-3.5 w-3.5 text-attention shrink-0" aria-hidden="true" />
+                        <span>Insufficient data</span>
+                        <span className="font-mono tabular-nums font-bold">{insufficientDataCount}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+          </section>
+
+          {/* ================================================================= */}
+          {/* Course Capacity & Staffing Dumbbell List (Needs Attention First)  */}
+          {/* ================================================================= */}
+          <section className="space-y-4">
+            <SectionHeader
+              title={`Course Capacity & Staffing Allocations (${sortedCourseCards.length})`}
+              subtitle="Ordered by priority: REDUCE and REVISE appear first. Dumbbells show current seats → recommended seats on one scale (a single dot means seats stay unchanged). Click any row for full details."
+              actions={
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sortedCourseCards.length > 0) openDrawer(sortedCourseCards[0])
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <Settings className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>View calculation rules</span>
+                </button>
+              }
             />
 
-            {/* Card 2: Seats now vs recommended */}
-            <div className="animate-card-enter rounded-lg border border-border bg-card p-4 text-card-foreground shadow-resting transition-colors">
-              <div className="flex items-center justify-between text-xs font-normal leading-4 text-muted-foreground">
-                <span>Seat Capacity</span>
-                <span className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground bg-muted/60">
-                  <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-              </div>
-              <div className="mt-2 text-xl font-bold tracking-tight text-foreground font-mono tabular-nums leading-7 flex items-baseline gap-2">
-                <span>{plan.totals.totalSeats.toLocaleString()}</span>
-                <span className="text-muted-foreground font-normal text-sm">→</span>
-                <span>{plan.totals.totalRecommendedSeats.toLocaleString()}</span>
-              </div>
-              <p
-                className={`mt-1 text-xs font-semibold leading-4 font-mono tabular-nums ${
-                  plan.totals.totalRecommendedSeats - plan.totals.totalSeats < 0
-                    ? "text-rose-600 dark:text-rose-400"
-                    : plan.totals.totalRecommendedSeats - plan.totals.totalSeats > 0
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground font-normal"
-                }`}
-              >
-                {plan.totals.totalRecommendedSeats - plan.totals.totalSeats > 0 ? "+" : ""}
-                {plan.totals.totalRecommendedSeats - plan.totals.totalSeats} seats (
-                {plan.totals.totalRecommendedSeats - plan.totals.totalSeats < 0
-                  ? "Reduction"
-                  : plan.totals.totalRecommendedSeats - plan.totals.totalSeats > 0
-                  ? "Expansion"
-                  : "Unchanged"}
-                )
-              </p>
-            </div>
-
-            {/* Card 3: Trainers now vs needed */}
-            <div className="animate-card-enter rounded-lg border border-border bg-card p-4 text-card-foreground shadow-resting transition-colors">
-              <div className="flex items-center justify-between text-xs font-normal leading-4 text-muted-foreground">
-                <span>Trainers Needed</span>
-                <span className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground bg-muted/60">
-                  <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-              </div>
-              <div className="mt-2 text-xl font-bold tracking-tight text-foreground font-mono tabular-nums leading-7 flex items-baseline gap-2">
-                <span>{plan.totals.totalTrainers.toLocaleString()}</span>
-                <span className="text-muted-foreground font-normal text-sm">→</span>
-                <span>{plan.totals.totalTrainersNeeded.toLocaleString()}</span>
-              </div>
-              <p
-                className={`mt-1 text-xs font-semibold leading-4 font-mono tabular-nums ${
-                  plan.totals.trainerChange < 0
-                    ? "text-rose-600 dark:text-rose-400"
-                    : plan.totals.trainerChange > 0
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground font-normal"
-                }`}
-              >
-                {plan.totals.trainerChange > 0 ? "+" : ""}
-                {plan.totals.trainerChange} trainers (
-                {plan.totals.trainerChange < 0
-                  ? "Surplus"
-                  : plan.totals.trainerChange > 0
-                  ? "Additional"
-                  : "Balanced"}
-                )
-              </p>
-            </div>
-
-            {/* Card 4: Counts per action */}
-            <div className="animate-card-enter rounded-lg border border-border bg-card p-4 text-card-foreground shadow-resting transition-colors">
-              <div className="flex items-center justify-between text-xs font-normal leading-4 text-muted-foreground">
-                <span>Action Counts</span>
-                <span className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground bg-muted/60">
-                  <Layers className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs font-mono tabular-nums">
-                <div className="flex items-center justify-between p-1 rounded bg-muted/40 px-2">
-                  <span className="text-muted-foreground">Reduce:</span>
-                  <span className="font-bold text-rose-700 dark:text-rose-400">
-                    {plan.counts.reduce}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-1 rounded bg-muted/40 px-2">
-                  <span className="text-muted-foreground">Revise:</span>
-                  <span className="font-bold text-amber-700 dark:text-amber-400">
-                    {plan.counts.revise}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-1 rounded bg-muted/40 px-2">
-                  <span className="text-muted-foreground">Expand:</span>
-                  <span className="font-bold text-sky-700 dark:text-sky-400">
-                    {plan.counts.expand}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-1 rounded bg-muted/40 px-2">
-                  <span className="text-muted-foreground">Keep:</span>
-                  <span className="font-bold text-slate-700 dark:text-slate-300">
-                    {plan.counts.keep}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* How this plan is calculated config line */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground border-b border-border/50 pb-3">
-            <span className="font-semibold text-foreground">How this plan is calculated:</span>
-            <span>
-              Target ratio:{" "}
-              <strong className="text-foreground font-mono">{plan.config.targetRatio}x</strong>
-            </span>
-            <span>•</span>
-            <span>
-              Expand below:{" "}
-              <strong className="text-foreground font-mono">{plan.config.expandBelowRatio}x</strong>
-            </span>
-            <span>•</span>
-            <span>
-              Coverage threshold:{" "}
-              <strong className="text-foreground font-mono">
-                {plan.config.reviseCoverageThreshold}%
-              </strong>
-            </span>
-            <span>•</span>
-            <span>
-              Seats per trainer:{" "}
-              <strong className="text-foreground font-mono">{plan.config.seatsPerTrainer}</strong>
-            </span>
-            <span>•</span>
-            <span>
-              Minimum openings:{" "}
-              <strong className="text-foreground font-mono">{plan.config.minOpenings}</strong>
-            </span>
-          </div>
-
-          {/* Courses Table Section */}
-          <SectionCard
-            title={`Training Plan Courses (${plan.items.length})`}
-            subtitle={`Course capacity and staffing recommendations for ${plan.districtName}`}
-          >
-            {plan.items.length === 0 ? (
+            {sortedCourseCards.length === 0 ? (
               <EmptyState
-                title="No courses offered"
-                description="No courses are offered in this district in the data."
+                title="No courses offered in this district"
+                description="This district currently has no active course offerings in the synthetic database."
               />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-xs">
-                  <thead className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase text-[11px] tracking-wide">
-                    <tr>
-                      <th scope="col" className="py-2.5 px-3 font-semibold">
-                        Course Name
-                      </th>
-                      <th scope="col" className="py-2.5 px-3 font-semibold">
-                        Actions
-                      </th>
-                      <th scope="col" className="py-2.5 px-3 font-semibold text-right">
-                        Seats (Now → Rec)
-                      </th>
-                      <th scope="col" className="py-2.5 px-3 font-semibold text-right">
-                        Trainers (Now → Need)
-                      </th>
-                      <th scope="col" className="py-2.5 px-3 font-semibold text-right">
-                        Est. Openings
-                      </th>
-                      <th scope="col" className="py-2.5 px-3 font-semibold text-right">
-                        Ratio
-                      </th>
-                      <th scope="col" className="py-2.5 px-3 font-semibold text-right">
-                        Coverage
-                      </th>
-                      <th scope="col" className="py-2.5 px-3 font-semibold">
-                        Reasons
-                      </th>
-                      <th scope="col" className="py-2.5 px-2 text-right">
-                        <span className="sr-only">Details</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40">
-                    {plan.items.map((item) => {
-                      const isOnlyInsufficientData =
-                        item.reasons.length === 1 && item.reasons[0] === "INSUFFICIENT_DATA"
+              (() => {
+                const maxSeatScale = computeDumbbellScale(
+                  sortedCourseCards.map((c) => ({
+                    prev: c.seats,
+                    latest: c.recommendedSeats,
+                  })),
+                  { minMax: 50, step: 25 }
+                )
 
-                      return (
-                        <tr
-                          key={item.courseId}
-                          className="hover:bg-muted/30 transition-colors group cursor-pointer"
-                          onClick={() => openDrawer(item)}
-                        >
-                          <td className="py-3 px-3">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openDrawer(item)
-                              }}
-                              className="font-medium text-foreground hover:text-primary hover:underline text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
-                            >
-                              {item.courseName}
-                            </button>
-                          </td>
+                return (
+                  <div>
+                    <DumbbellScaleHeader
+                      leftLabel="Offered Course & Rationale"
+                      maxScale={maxSeatScale}
+                      unit=" seats"
+                      rightLabel="Current → Recommended"
+                    />
+                    <div className="divide-y divide-border/70 border-b border-border/70">
+                      {sortedCourseCards.map((item, idx) => {
+                        const isOnlyInsufficientData =
+                          item.reasons.length === 1 && item.reasons[0] === "INSUFFICIENT_DATA"
+                        const plainReason = getCoursePlainReason(item)
+                        const tone =
+                          item.seatChange < 0
+                            ? "negative"
+                            : item.seatChange > 0
+                            ? "positive"
+                            : "neutral"
 
-                          <td className="py-3 px-3">
-                            <div className="flex flex-wrap gap-1 items-center">
-                              {isOnlyInsufficientData ? (
-                                <ActionBadge action="KEEP" isOnlyInsufficientData={true} />
-                              ) : (
-                                item.actions.map((act) => <ActionBadge key={act} action={act} />)
-                              )}
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-3 text-right font-mono tabular-nums">
-                            <span>
-                              {item.seats} → {item.recommendedSeats}
-                            </span>
-                            <span
-                              className={`ml-1.5 text-[11px] font-semibold ${
-                                item.seatChange < 0
-                                  ? "text-rose-600 dark:text-rose-400"
-                                  : item.seatChange > 0
-                                  ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-muted-foreground font-normal"
-                              }`}
-                            >
-                              ({item.seatChange > 0 ? "+" : ""}
-                              {item.seatChange})
-                            </span>
-                          </td>
-
-                          <td className="py-3 px-3 text-right font-mono tabular-nums">
-                            <span>
-                              {item.trainers} → {item.trainersNeeded}
-                            </span>
-                            <span
-                              className={`ml-1.5 text-[11px] font-semibold ${
-                                item.trainerChange < 0
-                                  ? "text-rose-600 dark:text-rose-400"
-                                  : item.trainerChange > 0
-                                  ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-muted-foreground font-normal"
-                              }`}
-                            >
-                              ({item.trainerChange > 0 ? "+" : ""}
-                              {item.trainerChange})
-                            </span>
-                          </td>
-
-                          <td className="py-3 px-3 text-right font-mono tabular-nums">
-                            {item.estimatedOpenings != null
-                              ? item.estimatedOpenings.toFixed(1)
-                              : "—"}
-                          </td>
-
-                          <td className="py-3 px-3 text-right font-mono tabular-nums">
-                            {item.ratio != null ? `${item.ratio.toFixed(2)}x` : "—"}
-                          </td>
-
-                          <td className="py-3 px-3 text-right font-mono tabular-nums">
-                            {item.coverage.toFixed(1)}%
-                          </td>
-
-                          <td className="py-3 px-3">
-                            <div className="flex flex-wrap gap-1">
-                              {item.reasons.map((r) => (
-                                <span
-                                  key={r}
-                                  className="inline-block px-1.5 py-0.5 rounded bg-muted text-[10px] text-muted-foreground font-medium"
-                                >
-                                  {formatReason(r)}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-2 text-right">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openDrawer(item)
-                              }}
-                              className="text-muted-foreground group-hover:text-foreground p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                              aria-label={`View details for ${item.courseName}`}
-                            >
-                              <ChevronRight className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                        return (
+                          <DumbbellRow
+                            key={item.courseId}
+                            rank={idx + 1}
+                            label={item.courseName}
+                            sublabel={`${plainReason} · Trainers ${item.trainers}→${item.trainersNeeded}`}
+                            previousValue={item.seats}
+                            latestValue={item.recommendedSeats}
+                            maxScale={maxSeatScale}
+                            previousText={`${item.seats}`}
+                            latestText={`${item.recommendedSeats} seats`}
+                            tone={tone}
+                            staggerIndex={idx}
+                            onClick={() => openDrawer(item)}
+                            badge={
+                              <div className="flex flex-wrap gap-1">
+                                {isOnlyInsufficientData ? (
+                                  <ActionBadge action="KEEP" isOnlyInsufficientData={true} />
+                                ) : (
+                                  item.actions.map((act) => <ActionBadge key={act} action={act} />)
+                                )}
+                              </div>
+                            }
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()
             )}
-          </SectionCard>
+          </section>
         </div>
-      ) : null}
+      )}
 
-      {/* Detail Drawer */}
+      {/* 4. Detail Drawer (1-click drilldown) */}
       <Drawer
         isOpen={isDrawerOpen}
         onClose={closeDrawer}
-        title={selectedCourse?.courseName || "Course Plan Details"}
-        subtitle={`District: ${plan?.districtName || "District"} • Course ID: ${
-          selectedCourse?.courseId ?? ""
-        }`}
+        title={selectedCourse?.courseName || "Course Training Plan Detail"}
+        subtitle={`District: ${plan?.districtName || "District"}`}
         width="w-[min(520px,100vw)]"
       >
-        {selectedCourse && (
-          <div className="space-y-5">
-            {/* Action Badges & Verdict Banner */}
-            <div className="p-3 rounded-lg border border-border/80 bg-muted/20 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-muted-foreground">Action Advice:</span>
+        {selectedCourse && plan && (
+          <div className="space-y-6 text-xs">
+            {/* Action Advice Banner */}
+            <div className="p-4 rounded-lg border border-border bg-card space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-foreground text-sm">Action Advice:</span>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedCourse.reasons.length === 1 &&
                   selectedCourse.reasons[0] === "INSUFFICIENT_DATA" ? (
@@ -703,168 +671,122 @@ export default function DistrictPlanPage() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1 border-t border-border/40">
-                <span className="font-medium text-foreground">Trigger reasons:</span>
-                <span>{selectedCourse.reasons.map(formatReason).join(", ")}</span>
+              <p className="text-muted-foreground leading-relaxed">
+                {getCoursePlainReason(selectedCourse)}
+              </p>
+              <div className="pt-1 text-[11px] text-muted-foreground border-t border-border/40">
+                Trigger factors: <strong className="text-foreground">{selectedCourse.reasons.map(formatReason).join(", ")}</strong>
               </div>
             </div>
 
             {/* Metrics Breakdown Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Seats */}
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <Users className="h-3.5 w-3.5" />
-                  <span>Seats Capacity</span>
-                </div>
-                <div className="text-lg font-bold font-mono tabular-nums text-foreground">
-                  {selectedCourse.seats} → {selectedCourse.recommendedSeats}
-                </div>
-                <div
-                  className={`text-[11px] font-mono tabular-nums ${
-                    selectedCourse.seatChange < 0
-                      ? "text-rose-600 dark:text-rose-400 font-semibold"
-                      : selectedCourse.seatChange > 0
-                      ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  Change: {selectedCourse.seatChange > 0 ? "+" : ""}
-                  {selectedCourse.seatChange} seats
-                </div>
-              </div>
+            <div className="space-y-2.5">
+              <h4 className="font-semibold text-foreground uppercase tracking-wider text-[11px]">
+                Deterministic Capacity Metrics
+              </h4>
 
-              {/* Trainers */}
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <GraduationCap className="h-3.5 w-3.5" />
-                  <span>Trainers Staffing</span>
-                </div>
-                <div className="text-lg font-bold font-mono tabular-nums text-foreground">
-                  {selectedCourse.trainers} → {selectedCourse.trainersNeeded}
-                </div>
-                <div
-                  className={`text-[11px] font-mono tabular-nums ${
-                    selectedCourse.trainerChange < 0
-                      ? "text-rose-600 dark:text-rose-400 font-semibold"
-                      : selectedCourse.trainerChange > 0
-                      ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  Change: {selectedCourse.trainerChange > 0 ? "+" : ""}
-                  {selectedCourse.trainerChange} trainers
-                </div>
-              </div>
-
-              {/* Estimated Openings */}
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="text-[11px] text-muted-foreground font-medium">
-                  Estimated Openings
-                </div>
-                <div className="text-lg font-bold font-mono tabular-nums text-foreground">
-                  {selectedCourse.estimatedOpenings != null
-                    ? selectedCourse.estimatedOpenings.toFixed(1)
-                    : "—"}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Target ratio: {plan?.config.targetRatio ?? 1.0}x
-                </div>
-              </div>
-
-              {/* Ratio */}
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="text-[11px] text-muted-foreground font-medium">
-                  Oversupply Ratio
-                </div>
-                <div className="text-lg font-bold font-mono tabular-nums text-foreground">
-                  {selectedCourse.ratio != null ? `${selectedCourse.ratio.toFixed(2)}x` : "—"}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Seats / estimated openings
-                </div>
-              </div>
-
-              {/* Coverage */}
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="text-[11px] text-muted-foreground font-medium">
-                  Curriculum Coverage
-                </div>
-                <div className="text-lg font-bold font-mono tabular-nums text-foreground">
-                  {selectedCourse.coverage.toFixed(1)}%
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Threshold: {plan?.config.reviseCoverageThreshold ?? 40.0}%
-                </div>
-              </div>
-
-              {/* Key Skill Trend */}
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="text-[11px] text-muted-foreground font-medium">
-                  Key Skill Trend
-                </div>
-                <div className="text-lg font-bold font-mono tabular-nums text-foreground flex items-center gap-1">
-                  {selectedCourse.keySkillTrend > 0.001 ? (
-                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  ) : selectedCourse.keySkillTrend < -0.001 ? (
-                    <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                  ) : (
-                    <Minus className="h-4 w-4 text-muted-foreground shrink-0" />
-                  )}
-                  <span>
-                    {selectedCourse.keySkillTrend > 0 ? "+" : ""}
-                    {(selectedCourse.keySkillTrend * 100).toFixed(1)} pp
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Seat Capacity
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
+                    {selectedCourse.seats} → {selectedCourse.recommendedSeats}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Change: {selectedCourse.seatChange > 0 ? "+" : ""}{selectedCourse.seatChange} seats
                   </span>
                 </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Demand-weighted momentum
+
+                <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Staffing Needed
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
+                    {selectedCourse.trainers} → {selectedCourse.trainersNeeded}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Change: {selectedCourse.trainerChange > 0 ? "+" : ""}{selectedCourse.trainerChange} trainers
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Estimated Openings
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
+                    {selectedCourse.estimatedOpenings != null
+                      ? selectedCourse.estimatedOpenings.toFixed(1)
+                      : "—"}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Target ratio: {plan.config.targetRatio}x
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Oversupply Ratio
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
+                    {selectedCourse.ratio != null ? `${selectedCourse.ratio.toFixed(2)}x` : "—"}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Seats / estimated openings
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Curriculum Coverage
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
+                    {selectedCourse.coverage.toFixed(1)}%
+                  </div>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Threshold: &lt; {plan.config.reviseCoverageThreshold}%
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Staffing Ratio
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
+                    {plan.config.seatsPerTrainer}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Seats per assigned trainer
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Curriculum Revision Advice (only for REVISE courses) */}
+            {/* Curriculum Add / Retire Guidance if REVISE */}
             {selectedCourse.actions.includes("REVISE") && (
-              <div className="space-y-4 pt-2 border-t border-border/40">
-                <h4 className="text-xs font-semibold text-foreground">
-                  Curriculum Revision Advice
+              <div className="space-y-4 pt-2 border-t border-border">
+                <h4 className="font-semibold text-foreground uppercase tracking-wider text-[11px]">
+                  Recommended Curriculum Revisions
                 </h4>
 
                 {/* Skills to Add */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1.5 font-semibold text-foreground">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>Skills to add ({selectedCourse.add.length})</span>
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">Share • Trend • Openings</span>
+                  <div className="flex items-center gap-1.5 font-medium text-positive-foreground">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-positive" aria-hidden="true" />
+                    <span>Skills to Add ({selectedCourse.add.length})</span>
                   </div>
-
                   {selectedCourse.add.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic p-2 border border-dashed rounded">
-                      None
+                      No specific addition candidates passed threshold.
                     </p>
                   ) : (
-                    <div className="space-y-1.5 border border-border/60 rounded-md p-2 bg-card max-h-48 overflow-y-auto">
-                      {selectedCourse.add.map((skill) => (
-                        <div
-                          key={skill.skillId}
-                          className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-muted/40"
-                        >
-                          <span className="font-medium text-foreground truncate pr-2">
-                            {skill.skillName}
+                    <div className="divide-y divide-border rounded-md border border-border bg-card">
+                      {selectedCourse.add.map((s) => (
+                        <div key={s.skillId} className="flex items-center justify-between p-2">
+                          <span className="font-medium text-foreground">{s.skillName}</span>
+                          <span className="font-mono text-[11px] text-positive-foreground font-semibold">
+                            {formatPercent(s.latestShare)} share
                           </span>
-                          <div className="flex items-center gap-2 shrink-0 font-mono text-[11px] tabular-nums">
-                            <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                              {(skill.latestShare * 100).toFixed(1)}%
-                            </span>
-                            <span className="text-muted-foreground">
-                              {skill.trend >= 0 ? "+" : ""}
-                              {(skill.trend * 100).toFixed(1)} pp
-                            </span>
-                            <span className="text-muted-foreground">
-                              {skill.postingsLatest} postings
-                            </span>
-                          </div>
                         </div>
                       ))}
                     </div>
@@ -873,40 +795,22 @@ export default function DistrictPlanPage() {
 
                 {/* Skills to Retire */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1.5 font-semibold text-foreground">
-                      <XCircle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
-                      <span>Skills to retire ({selectedCourse.retire.length})</span>
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">Share • Trend • Openings</span>
+                  <div className="flex items-center gap-1.5 font-medium text-negative-foreground">
+                    <XCircle className="h-3.5 w-3.5 text-negative" aria-hidden="true" />
+                    <span>Skills to Retire ({selectedCourse.retire.length})</span>
                   </div>
-
                   {selectedCourse.retire.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic p-2 border border-dashed rounded">
-                      None
+                      No taught skills meet the retirement rule.
                     </p>
                   ) : (
-                    <div className="space-y-1.5 border border-border/60 rounded-md p-2 bg-card max-h-48 overflow-y-auto">
-                      {selectedCourse.retire.map((skill) => (
-                        <div
-                          key={skill.skillId}
-                          className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-muted/40"
-                        >
-                          <span className="font-medium text-foreground truncate pr-2">
-                            {skill.skillName}
+                    <div className="divide-y divide-border rounded-md border border-border bg-card">
+                      {selectedCourse.retire.map((s) => (
+                        <div key={s.skillId} className="flex items-center justify-between p-2">
+                          <span className="font-medium text-foreground">{s.skillName}</span>
+                          <span className="font-mono text-[11px] text-negative-foreground font-semibold">
+                            {(s.relativeGrowth * 100).toFixed(1)}% decline
                           </span>
-                          <div className="flex items-center gap-2 shrink-0 font-mono text-[11px] tabular-nums">
-                            <span className="text-rose-700 dark:text-rose-400 font-semibold">
-                              {(skill.latestShare * 100).toFixed(1)}%
-                            </span>
-                            <span className="text-muted-foreground">
-                              {skill.trend >= 0 ? "+" : ""}
-                              {(skill.trend * 100).toFixed(1)} pp
-                            </span>
-                            <span className="text-muted-foreground">
-                              {skill.postingsLatest} postings
-                            </span>
-                          </div>
                         </div>
                       ))}
                     </div>
@@ -915,9 +819,30 @@ export default function DistrictPlanPage() {
               </div>
             )}
 
-            {/* Synthetic Data Note */}
-            <div className="text-[11px] text-muted-foreground italic pt-2 border-t border-border/40">
-              Based on synthetic data.
+            {/* Calculation Configuration Transparency */}
+            <div className="p-3.5 rounded-lg border border-border/80 bg-muted/20 space-y-1.5">
+              <span className="font-semibold text-foreground">District Plan Calculation Configuration:</span>
+              <ul className="text-[11px] text-muted-foreground space-y-1">
+                <li>• Target ratio: {plan.config.targetRatio}x (recommends seats = round(openings × targetRatio))</li>
+                <li>• Expand below: {plan.config.expandBelowRatio}x</li>
+                <li>• Revise coverage threshold: {plan.config.reviseCoverageThreshold}%</li>
+                <li>• Seats per trainer: {plan.config.seatsPerTrainer} (determines staffing adjustments)</li>
+                <li>• Minimum openings guard: {plan.config.minOpenings}</li>
+              </ul>
+            </div>
+
+            {/* Link to recommendations */}
+            <div className="pt-2 border-t border-border flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                Inspect full course syllabus:
+              </span>
+              <Link
+                href={`/policy/course-recommendations?course=${selectedCourse.courseId}&district=${selectedDistrictId}`}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+              >
+                <span>View course recommendations</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
         )}

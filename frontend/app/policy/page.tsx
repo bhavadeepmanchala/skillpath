@@ -1,66 +1,100 @@
 "use client"
 
-import React, { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback, useMemo } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
-  Briefcase,
-  Layers,
-  Users,
-  MapPin,
-  GraduationCap,
-  Calendar,
   ArrowRight,
-  TrendingUp,
-  TrendingDown,
+  AlertTriangle,
+  ChevronRight,
+  ShieldAlert,
+  GraduationCap,
 } from "lucide-react"
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   Tooltip,
-  Cell,
   CartesianGrid,
+  AreaChart,
+  Area,
 } from "recharts"
 import {
   fetchDemandSummary,
   fetchDemandTrends,
   fetchDistricts,
+  fetchFlags,
+  fetchSkillTrend,
   type DemandSummary,
   type DemandTrendsResponse,
   type DistrictDemandItem,
+  type FlagsResponse,
+  type SkillTrendResponse,
+  type SkillTrendItem,
 } from "@/lib/demand-api"
 import {
   PageHeader,
-  KpiCard,
-  KpiCardSkeleton,
-  SectionCard,
+  FindingHeadline,
+  BigNumber,
+  FigureRow,
+  SectionHeader,
+  SourceCaption,
+  DumbbellRow,
+  DumbbellScaleHeader,
+  TypographicRow,
+  TypographicList,
   DeltaBadge,
+  Drawer,
   ErrorState,
   EmptyState,
   ChartTooltip,
   ChartSkeleton,
   TableSkeleton,
-  useChartAnimation,
+  Skeleton,
 } from "@/components/ui-kit"
+import {
+  buildSummaryFinding,
+  buildRisingTrendFinding,
+  formatInteger,
+  formatPercent,
+} from "@/lib/findings"
+import { computeDumbbellScale } from "@/lib/dumbbell"
 
 export default function PolicyOverviewPage() {
-  // Summary KPIs state
+  const router = useRouter()
+
+  // 1. Summary state
   const [summary, setSummary] = useState<DemandSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [summaryError, setSummaryError] = useState<string | null>(null)
 
-  // Trends state
+  // 2. Trends state
   const [trends, setTrends] = useState<DemandTrendsResponse | null>(null)
   const [trendsLoading, setTrendsLoading] = useState(true)
   const [trendsError, setTrendsError] = useState<string | null>(null)
 
-  // Districts state
+  // 3. Flags state (for "What needs attention" strip)
+  const [flags, setFlags] = useState<FlagsResponse | null>(null)
+  const [flagsLoading, setFlagsLoading] = useState(true)
+  const [flagsError, setFlagsError] = useState<string | null>(null)
+
+  // 4. Districts state
   const [districts, setDistricts] = useState<DistrictDemandItem[]>([])
+  const [totalDistrictPostings, setTotalDistrictPostings] = useState<number>(0)
   const [districtsLoading, setDistrictsLoading] = useState(true)
   const [districtsError, setDistrictsError] = useState<string | null>(null)
-  const [districtsViewMode, setDistrictsViewMode] = useState<"chart" | "table">("chart")
+
+  // 5. Drawer state for skill drill-down
+  const [drawerSkill, setDrawerSkill] = useState<{
+    skillId: number
+    name: string
+    category: string
+    item?: SkillTrendItem
+  } | null>(null)
+  const [drawerTrend, setDrawerTrend] = useState<SkillTrendResponse | null>(null)
+  const [drawerLoading, setDrawerLoading] = useState(false)
+  const [drawerError, setDrawerError] = useState<string | null>(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -69,7 +103,7 @@ export default function PolicyOverviewPage() {
       const data = await fetchDemandSummary()
       setSummary(data)
     } catch {
-      setSummaryError("Could not load data. Is the backend running?")
+      setSummaryError("Could not load summary figures. Is the backend running?")
     } finally {
       setSummaryLoading(false)
     }
@@ -82,9 +116,22 @@ export default function PolicyOverviewPage() {
       const data = await fetchDemandTrends({ limit: 5 })
       setTrends(data)
     } catch {
-      setTrendsError("Could not load data. Is the backend running?")
+      setTrendsError("Could not load skill trends. Is the backend running?")
     } finally {
       setTrendsLoading(false)
+    }
+  }, [])
+
+  const loadFlags = useCallback(async () => {
+    setFlagsLoading(true)
+    setFlagsError(null)
+    try {
+      const data = await fetchFlags()
+      setFlags(data)
+    } catch {
+      setFlagsError("Could not load attention signals. Is the backend running?")
+    } finally {
+      setFlagsLoading(false)
     }
   }, [])
 
@@ -93,10 +140,12 @@ export default function PolicyOverviewPage() {
     setDistrictsError(null)
     try {
       const data = await fetchDistricts()
-      const sorted = [...data.districts].sort((a, b) => b.postings - a.postings).slice(0, 5)
+      const total = data.districts.reduce((sum, d) => sum + d.postings, 0)
+      const sorted = [...data.districts].sort((a, b) => b.postings - a.postings).slice(0, 8)
+      setTotalDistrictPostings(total)
       setDistricts(sorted)
     } catch {
-      setDistrictsError("Could not load data. Is the backend running?")
+      setDistrictsError("Could not load regional hiring volume. Is the backend running?")
     } finally {
       setDistrictsLoading(false)
     }
@@ -105,290 +154,551 @@ export default function PolicyOverviewPage() {
   useEffect(() => {
     loadSummary()
     loadTrends()
+    loadFlags()
     loadDistricts()
-  }, [loadSummary, loadTrends, loadDistricts])
+  }, [loadSummary, loadTrends, loadFlags, loadDistricts])
 
-  const isChartAnimationActive = useChartAnimation()
+  const openSkillDrawer = useCallback(async (item: SkillTrendItem) => {
+    setDrawerSkill({
+      skillId: item.skillId,
+      name: item.name,
+      category: item.category,
+      item,
+    })
+    setIsDrawerOpen(true)
+    setDrawerLoading(true)
+    setDrawerError(null)
+    setDrawerTrend(null)
+    try {
+      const trend = await fetchSkillTrend(item.skillId)
+      setDrawerTrend(trend)
+    } catch {
+      setDrawerError("Could not load monthly trend points for this skill.")
+    } finally {
+      setDrawerLoading(false)
+    }
+  }, [])
 
-  const maxRisingChange = Math.max(
-    ...(trends?.rising.map((r) => Math.abs(r.change)) || [0.01]),
-    0.01
-  )
-  const maxDecliningChange = Math.max(
-    ...(trends?.declining.map((d) => Math.abs(d.change)) || [0.01]),
-    0.01
-  )
+  // Finding headline computation
+  const findingHeadline = useMemo(() => {
+    if (trends && trends.rising.length > 0) {
+      return buildRisingTrendFinding(trends.rising[0])
+    }
+    return buildSummaryFinding(summary)
+  }, [trends, summary])
+
+  // Attention strip numbers derived from real /api/flags
+  const attentionMetrics = useMemo(() => {
+    if (!flags || !flags.items) {
+      return { oversupplied: 0, obsolete: 0, lowCoverage: 0, totalOfferings: 0 }
+    }
+    const oversupplied = flags.items.filter((i) => i.oversupplied).length
+    const obsolete = flags.items.filter((i) => Boolean(i.obsolete)).length
+    const threshold = flags.obsoleteCoverageThreshold ?? 40
+    const lowCoverage = flags.items.filter(
+      (i) => i.coverage !== undefined && i.coverage < threshold
+    ).length
+    return { oversupplied, obsolete, lowCoverage, totalOfferings: flags.items.length }
+  }, [flags])
+
+  const risingScale = useMemo(() => {
+    const items = (trends?.rising ?? []).slice(0, 5).map((r) => ({
+      prev: r.sharePrevious * 100,
+      latest: r.shareLatest * 100,
+    }))
+    return computeDumbbellScale(items, { minMax: 20, step: 10, capAt: 100 })
+  }, [trends?.rising])
+
+  const decliningScale = useMemo(() => {
+    const items = (trends?.declining ?? []).slice(0, 5).map((d) => ({
+      prev: d.sharePrevious * 100,
+      latest: d.shareLatest * 100,
+    }))
+    return computeDumbbellScale(items, { minMax: 20, step: 10, capAt: 100 })
+  }, [trends?.declining])
 
   return (
-    <div className="space-y-6 animate-page-enter">
+    <div className="space-y-10 animate-page-enter">
+      {/* 1. Page Header */}
       <PageHeader
         title="Policy Intelligence Overview"
-        description="High-level workforce demand signals, macro skill trajectories, and geographic concentrations across monitored regions."
+        standfirst="High-level workforce demand signals, macro skill trajectories, and curriculum alignment priorities across India."
         showSyntheticBadge
       />
 
-      {/* 1. KPI Row from /api/demand/summary */}
-      {summaryLoading ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <KpiCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : summaryError ? (
-        <ErrorState
-          message={summaryError}
-          onRetry={loadSummary}
-          compact
-        />
-      ) : summary ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <KpiCard
-            label="Total Postings"
-            rawValue={summary.totalPostings}
-            footnote="Aggregated across all cohorts"
-            icon={Briefcase}
-            staggerIndex={0}
-          />
-          <KpiCard
-            label="Skills Tracked"
-            rawValue={summary.totalSkills}
-            footnote="Unique taxonomy skills"
-            icon={Layers}
-            staggerIndex={1}
-          />
-          <KpiCard
-            label="Roles"
-            rawValue={summary.totalRoles}
-            footnote="Target occupation profiles"
-            icon={Users}
-            staggerIndex={2}
-          />
-          <KpiCard
-            label="Districts"
-            rawValue={summary.totalDistricts}
-            footnote="Reporting geographic areas"
-            icon={MapPin}
-            staggerIndex={3}
-          />
-          <KpiCard
-            label="Courses"
-            rawValue={summary.totalCourses}
-            footnote="Curriculum supply items"
-            icon={GraduationCap}
-            staggerIndex={4}
-          />
-          <KpiCard
-            label={`Postings in ${summary.latestMonth}`}
-            rawValue={summary.latestMonthPostings}
-            footnote="Latest monthly cohort"
-            icon={Calendar}
-            staggerIndex={5}
-          />
-        </div>
-      ) : null}
+      {/* 2. Editorial Finding Headline + Open FigureRow (no KPI boxes) */}
+      <section className="space-y-6">
+        {trendsLoading && summaryLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-4 w-1/3" />
+          </div>
+        ) : (
+          <FindingHeadline kicker="National Macro Finding" sentence={findingHeadline}>
+            <SourceCaption
+              scope="National"
+              window={
+                trends?.latestWindow
+                  ? `${trends.latestWindow.from} – ${trends.latestWindow.to}`
+                  : summary?.latestMonth || "Latest 3-month window"
+              }
+              note="Calculated from synthetic job postings and curriculum offerings"
+            />
+          </FindingHeadline>
+        )}
 
-      {/* 2. Emerging Skills & Declining Skills */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Emerging Skills */}
-        <SectionCard
-          title="Emerging Skills"
-          subtitle={
-            trends
-              ? `Top 5 skills with largest increase in demand share (${trends.latestWindow.from} to ${trends.latestWindow.to})`
-              : "Top 5 skills with largest increase in demand share"
-          }
-          actionSlot={
+        {summaryLoading ? (
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6 border-y border-border py-5">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
+        ) : summaryError ? (
+          <ErrorState message={summaryError} onRetry={loadSummary} compact />
+        ) : summary ? (
+          <FigureRow columns={6}>
+            <BigNumber
+              label="Total Postings"
+              rawValue={summary.totalPostings}
+              footnote="Aggregated demand"
+            />
+            <BigNumber
+              label="Skills Tracked"
+              rawValue={summary.totalSkills}
+              footnote="Taxonomy universe"
+            />
+            <BigNumber
+              label="Target Roles"
+              rawValue={summary.totalRoles}
+              footnote="Occupational profiles"
+            />
+            <BigNumber
+              label="Districts"
+              rawValue={summary.totalDistricts}
+              footnote="Reporting hubs"
+            />
+            <BigNumber
+              label="Courses"
+              rawValue={summary.totalCourses}
+              footnote="Curriculum catalog"
+            />
+            <BigNumber
+              label={`Hiring in ${summary.latestMonth}`}
+              rawValue={summary.latestMonthPostings}
+              footnote="Latest monthly cohort"
+            />
+          </FigureRow>
+        ) : null}
+      </section>
+
+      {/* 3. What Needs Attention Strip (Open hairline-separated columns, no card wrappers) */}
+      <section>
+        <SectionHeader
+          title="What Needs Attention"
+          subtitle={`Live flags across ${attentionMetrics.totalOfferings} evaluated course offerings`}
+        />
+
+        {flagsLoading ? (
+          <div className="grid gap-6 sm:grid-cols-3 py-4 border-b border-border">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-7 w-20" />
+                <Skeleton className="h-3 w-40" />
+              </div>
+            ))}
+          </div>
+        ) : flagsError ? (
+          <ErrorState message={flagsError} onRetry={loadFlags} compact />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border border-b border-border">
+            {/* Action 1: Oversupplied Offerings -> District Plan */}
             <Link
-              href="/policy/job-market-trends"
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-2"
+              href="/policy/district-plan"
+              className="group py-4 sm:px-5 sm:first:pl-0 sm:last:pr-0 hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
             >
-              <span>View all trends</span>
-              <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-attention-foreground">
+                    Oversupplied Capacity
+                  </span>
+                  <AlertTriangle className="h-4 w-4 text-attention shrink-0" aria-hidden="true" />
+                </div>
+                <div className="mt-1.5 font-serif text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                  {attentionMetrics.oversupplied}{" "}
+                  {attentionMetrics.oversupplied === 1 ? "Offering" : "Offerings"}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  Seat quotas substantially exceed estimated local job openings.
+                </p>
+              </div>
+              <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
+                <span>Review District Plan</span>
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </div>
             </Link>
-          }
-        >
+
+            {/* Action 2: Obsolete Offerings -> Skill Gap Explorer */}
+            <Link
+              href="/policy/workforce-skill-gaps"
+              className="group py-4 sm:px-5 hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-negative-foreground">
+                    Curriculum Obsolescence
+                  </span>
+                  <ShieldAlert className="h-4 w-4 text-negative shrink-0" aria-hidden="true" />
+                </div>
+                <div className="mt-1.5 font-serif text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                  {attentionMetrics.obsolete}{" "}
+                  {attentionMetrics.obsolete === 1 ? "Offering" : "Offerings"}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  Low core coverage combined with contracting demand in taught skills.
+                </p>
+              </div>
+              <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
+                <span>Investigate Skill Gaps</span>
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </div>
+            </Link>
+
+            {/* Action 3: Low Coverage / Skills to Update -> Course Recommendations */}
+            <Link
+              href="/policy/course-recommendations"
+              className="group py-4 sm:px-5 sm:last:pr-0 hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Curriculum Gaps
+                  </span>
+                  <GraduationCap className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
+                </div>
+                <div className="mt-1.5 font-serif text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                  {attentionMetrics.lowCoverage}{" "}
+                  {attentionMetrics.lowCoverage === 1 ? "Offering" : "Offerings"}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  Coverage under {flags?.obsoleteCoverageThreshold ?? 40}% requiring curriculum updates.
+                </p>
+              </div>
+              <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
+                <span>View Recommendations</span>
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </div>
+            </Link>
+          </div>
+        )}
+      </section>
+
+      {/* 4. Top Rising & Top Contracting Skills using shared DumbbellRow */}
+      <div className="grid gap-10 lg:grid-cols-2">
+        {/* Top Rising Skills */}
+        <section>
+          <SectionHeader
+            title="Top Rising Skills"
+            subtitle="Previous window share → latest window share. Click any skill to inspect its 18-month trend."
+            actions={
+              <Link
+                href="/policy/job-market-trends"
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                <span>View all trends</span>
+                <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            }
+          />
+
           {trendsLoading ? (
             <TableSkeleton rows={5} cols={3} />
           ) : trendsError ? (
             <ErrorState message={trendsError} onRetry={loadTrends} compact />
           ) : !trends || trends.rising.length === 0 ? (
-            <EmptyState title="No emerging skills data" description="No rising skills found for the default window." />
+            <EmptyState
+              title="No rising skills"
+              description="No emerging skills passed the threshold."
+            />
           ) : (
-            <div className="space-y-3">
-              {trends.rising.map((item, idx) => {
-                const widthPct = Math.min(100, Math.max(8, Math.round((Math.abs(item.change) / maxRisingChange) * 100)))
-                return (
-                  <div key={item.skillId} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-semibold text-muted-foreground bg-muted">
-                          {idx + 1}
-                        </span>
-                        <span className="font-medium text-foreground truncate">{item.name}</span>
-                        <span className="text-[11px] text-muted-foreground truncate">({item.category})</span>
-                      </div>
-                      <DeltaBadge value={item.change} size="sm" showLabel />
-                    </div>
-                    <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden" aria-hidden="true">
-                      <div
-                        className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                        style={{ width: `${widthPct}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
+            <div>
+              <DumbbellScaleHeader
+                leftLabel="Skill"
+                maxScale={risingScale}
+                unit="%"
+                rightLabel="Prev → Latest"
+              />
+              <div className="divide-y divide-border/70 border-b border-border/70">
+                {trends.rising.slice(0, 5).map((item, idx) => (
+                  <DumbbellRow
+                    key={item.skillId}
+                    rank={idx + 1}
+                    label={item.name}
+                    sublabel={item.category}
+                    previousValue={item.sharePrevious * 100}
+                    latestValue={item.shareLatest * 100}
+                    maxScale={risingScale}
+                    previousText={formatPercent(item.sharePrevious)}
+                    latestText={formatPercent(item.shareLatest)}
+                    tone="positive"
+                    staggerIndex={idx}
+                    badge={<DeltaBadge value={item.change} size="sm" showLabel />}
+                    onClick={() => openSkillDrawer(item)}
+                  />
+                ))}
+              </div>
             </div>
           )}
-        </SectionCard>
+        </section>
 
-        {/* Declining Skills */}
-        <SectionCard
-          title="Declining Skills"
-          subtitle={
-            trends
-              ? `Top 5 skills with largest decrease in demand share (${trends.latestWindow.from} to ${trends.latestWindow.to})`
-              : "Top 5 skills with largest decrease in demand share"
-          }
-          actionSlot={
-            <Link
-              href="/policy/job-market-trends"
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-2"
-            >
-              <span>View all trends</span>
-              <ArrowRight className="h-3 w-3" aria-hidden="true" />
-            </Link>
-          }
-        >
+        {/* Top Contracting Skills */}
+        <section>
+          <SectionHeader
+            title="Top Contracting Skills"
+            subtitle="Previous window share → latest window share. Click any skill to inspect contraction magnitude."
+            actions={
+              <Link
+                href="/policy/job-market-trends"
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                <span>View all trends</span>
+                <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            }
+          />
+
           {trendsLoading ? (
             <TableSkeleton rows={5} cols={3} />
           ) : trendsError ? (
             <ErrorState message={trendsError} onRetry={loadTrends} compact />
           ) : !trends || trends.declining.length === 0 ? (
-            <EmptyState title="No declining skills data" description="No declining skills found for the default window." />
+            <EmptyState
+              title="No contracting skills"
+              description="No declining skills recorded."
+            />
           ) : (
-            <div className="space-y-3">
-              {trends.declining.map((item, idx) => {
-                const widthPct = Math.min(100, Math.max(8, Math.round((Math.abs(item.change) / maxDecliningChange) * 100)))
-                return (
-                  <div key={item.skillId} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-semibold text-muted-foreground bg-muted">
-                          {idx + 1}
-                        </span>
-                        <span className="font-medium text-foreground truncate">{item.name}</span>
-                        <span className="text-[11px] text-muted-foreground truncate">({item.category})</span>
-                      </div>
-                      <DeltaBadge value={item.change} size="sm" showLabel />
-                    </div>
-                    <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden" aria-hidden="true">
-                      <div
-                        className="h-full rounded-full bg-rose-500 transition-all duration-300"
-                        style={{ width: `${widthPct}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
+            <div>
+              <DumbbellScaleHeader
+                leftLabel="Skill"
+                maxScale={decliningScale}
+                unit="%"
+                rightLabel="Prev → Latest"
+              />
+              <div className="divide-y divide-border/70 border-b border-border/70">
+                {trends.declining.slice(0, 5).map((item, idx) => (
+                  <DumbbellRow
+                    key={item.skillId}
+                    rank={idx + 1}
+                    label={item.name}
+                    sublabel={item.category}
+                    previousValue={item.sharePrevious * 100}
+                    latestValue={item.shareLatest * 100}
+                    maxScale={decliningScale}
+                    previousText={formatPercent(item.sharePrevious)}
+                    latestText={formatPercent(item.shareLatest)}
+                    tone="negative"
+                    staggerIndex={idx}
+                    badge={<DeltaBadge value={item.change} size="sm" showLabel />}
+                    onClick={() => openSkillDrawer(item)}
+                  />
+                ))}
+              </div>
             </div>
           )}
-        </SectionCard>
+        </section>
       </div>
 
-      {/* 3. Top Districts by Postings */}
-      <SectionCard
-        title="Top Districts by Postings"
-        subtitle="Top 5 regional centers by total tracked job openings across all recorded periods"
-        showViewToggle
-        viewMode={districtsViewMode}
-        onViewModeChange={setDistrictsViewMode}
-        actionSlot={
-          <Link
-            href="/policy/geographic-insights"
-            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-2"
-          >
-            <span>Geographic insights</span>
-            <ArrowRight className="h-3 w-3" aria-hidden="true" />
-          </Link>
-        }
-      >
+      {/* 5. Top Regional Hiring Centers (TypographicList, top 8) */}
+      <section>
+        <SectionHeader
+          title="Top Regional Hiring Centers"
+          subtitle="Top 8 districts by aggregated synthetic job posting volume, scaled to the highest-volume district."
+          actions={
+            <Link
+              href="/policy/geographic-insights"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <span>View all districts</span>
+              <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            </Link>
+          }
+        />
+
         {districtsLoading ? (
-          <ChartSkeleton height={220} />
+          <TableSkeleton rows={6} cols={4} />
         ) : districtsError ? (
           <ErrorState message={districtsError} onRetry={loadDistricts} />
         ) : districts.length === 0 ? (
-          <EmptyState title="No district records" description="No district demand figures returned from backend." />
-        ) : districtsViewMode === "chart" ? (
-          <div className="h-64 w-full" aria-label="Horizontal bar chart of top 5 districts by postings">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={[...districts].reverse()}
-                layout="vertical"
-                margin={{ top: 5, right: 30, left: 70, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" opacity={0.6} />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  tickLine={false}
-                  axisLine={{ stroke: "var(--border)" }}
-                />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  tick={{ fontSize: 11, fill: "var(--foreground)" }}
-                  tickLine={false}
-                  axisLine={{ stroke: "var(--border)" }}
-                  width={90}
-                />
-                <Tooltip
-                  content={
-                    <ChartTooltip
-                      valueFormatter={(v) => `${v.toLocaleString()} postings`}
-                    />
+          <EmptyState
+            title="No district records"
+            description="No district demand figures returned from backend."
+          />
+        ) : (
+          <TypographicList
+            totalCount={districts.length}
+            visibleCount={districts.length}
+            showAll={true}
+            itemLabel="districts"
+          >
+            {districts.map((d, i) => {
+              const maxPostings = districts[0]?.postings || 1
+              const barWidth = Math.min(
+                100,
+                Math.max(4, Math.round((d.postings / maxPostings) * 100))
+              )
+              const sharePct =
+                totalDistrictPostings > 0
+                  ? (d.postings / totalDistrictPostings) * 100
+                  : 0
+
+              return (
+                <TypographicRow
+                  key={d.districtId}
+                  rank={i + 1}
+                  title={d.name}
+                  subtitle={d.state}
+                  staggerIndex={i}
+                  primaryFigure={`${formatInteger(d.postings)} postings`}
+                  secondaryFigure={`${sharePct.toFixed(1)}%`}
+                  onClick={() =>
+                    router.push(`/policy/district-plan?district=${d.districtId}`)
+                  }
+                  visual={
+                    <div
+                      className="h-1 w-full rounded-full bg-muted/60 overflow-hidden"
+                      aria-hidden="true"
+                    >
+                      <div
+                        className="h-full rounded-full bg-primary/80 transition-all duration-300"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
                   }
                 />
-                <Bar
-                  dataKey="postings"
-                  name="Job Openings"
-                  fill="var(--primary)"
-                  radius={[0, 4, 4, 0]}
-                  barSize={18}
-                  isAnimationActive={isChartAnimationActive}
-                  animationDuration={550}
-                  animationEasing="ease-out"
+              )
+            })}
+          </TypographicList>
+        )}
+      </section>
+
+      {/* 6. Skill Trend Detail Drawer (Reachable in 1 click) */}
+      <Drawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        title={drawerSkill?.name || "Skill Details"}
+        subtitle={
+          drawerSkill?.category
+            ? `Category: ${drawerSkill.category}`
+            : "Longitudinal Demand"
+        }
+      >
+        {drawerSkill && (
+          <div className="space-y-6">
+            {drawerSkill.item && (
+              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg border border-border bg-card">
+                <div>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Latest Share
+                  </span>
+                  <div className="font-serif text-xl font-bold tabular-nums text-foreground mt-0.5">
+                    {formatPercent(drawerSkill.item.shareLatest)}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">
+                    {drawerSkill.item.postingsLatest.toLocaleString("en-IN")} postings
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Trailing Shift
+                  </span>
+                  <div className="mt-1">
+                    <DeltaBadge value={drawerSkill.item.change} showLabel size="md" />
+                  </div>
+                  {drawerSkill.item.relativeGrowth !== null && (
+                    <span className="text-[11px] text-muted-foreground mt-0.5 block">
+                      {formatPercent(drawerSkill.item.relativeGrowth, 1, false)} relative growth
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                18-Month Demand Trajectory
+              </h4>
+              {drawerLoading ? (
+                <ChartSkeleton height={180} />
+              ) : drawerError ? (
+                <ErrorState message={drawerError} compact />
+              ) : drawerTrend && drawerTrend.points && drawerTrend.points.length > 0 ? (
+                <div
+                  className="h-48 w-full border border-border rounded-lg p-2 bg-card"
+                  aria-label={`18-month demand trajectory area chart for ${drawerSkill.name}`}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={drawerTrend.points.map((p) => ({
+                        month: p.month,
+                        sharePct: Number((p.share * 100).toFixed(2)),
+                        postings: p.postingsWithSkill,
+                      }))}
+                      margin={{ top: 8, right: 12, left: -20, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.6} />
+                      <XAxis
+                        dataKey="month"
+                        tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                        tickLine={false}
+                        axisLine={{ stroke: "var(--border)" }}
+                      />
+                      <YAxis
+                        domain={[0, "auto"]}
+                        tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                        tickLine={false}
+                        axisLine={{ stroke: "var(--border)" }}
+                        unit="%"
+                      />
+                      <Tooltip
+                        content={
+                          <ChartTooltip valueFormatter={(v) => `${v}% of postings`} />
+                        }
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="sharePct"
+                        stroke="var(--primary)"
+                        fill="var(--primary)"
+                        fillOpacity={0.15}
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <EmptyState
+                  title="No trend history"
+                  description="No monthly points available."
                 />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="sticky top-0 bg-card border-b border-border text-muted-foreground z-10">
-                  <th className="py-2.5 pr-4 font-medium">Rank</th>
-                  <th className="py-2.5 px-4 font-medium">District</th>
-                  <th className="py-2.5 px-4 font-medium">State</th>
-                  <th className="py-2.5 pl-4 text-right font-medium">Postings</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {districts.map((d, i) => (
-                  <tr key={d.districtId} className="hover:bg-muted/50 transition-colors duration-120">
-                    <td className="py-2.5 pr-4 font-mono font-medium text-muted-foreground">{i + 1}</td>
-                    <td className="py-2.5 px-4 font-medium text-foreground">{d.name}</td>
-                    <td className="py-2.5 px-4 text-muted-foreground">{d.state}</td>
-                    <td className="py-2.5 pl-4 text-right font-mono font-medium text-foreground tabular-nums">
-                      {d.postings.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-border">
+              <Link
+                href="/policy/skill-demand"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+              >
+                <span>Open in Skill Demand Analysis</span>
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            </div>
           </div>
         )}
-      </SectionCard>
+      </Drawer>
     </div>
   )
 }

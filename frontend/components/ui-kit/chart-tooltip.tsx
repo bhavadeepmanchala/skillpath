@@ -14,7 +14,7 @@ export function ChartTooltip({
   active,
   payload,
   label,
-  valueFormatter = (v) => v.toLocaleString(),
+  valueFormatter = (v) => v.toLocaleString("en-IN"),
   labelFormatter,
 }: ChartTooltipProps) {
   if (!active || !payload || payload.length === 0) {
@@ -37,13 +37,13 @@ export function ChartTooltip({
 
           return (
             <div key={idx} className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5 truncate">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <span
                   className="h-2 w-2 rounded-xs shrink-0"
                   style={{ backgroundColor: color }}
                   aria-hidden="true"
                 />
-                <span className="text-muted-foreground truncate">{item.name}</span>
+                <span className="text-muted-foreground break-words">{item.name}</span>
               </div>
               <span className="font-mono font-medium text-foreground tabular-nums shrink-0">
                 {val}

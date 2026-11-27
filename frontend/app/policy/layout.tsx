@@ -4,33 +4,27 @@ import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { motion, MotionConfig } from "motion/react"
 import {
   Compass,
-  LayoutDashboard,
-  TrendingUp,
-  GitCompare,
-  BarChart3,
-  MapPin,
   LogOut,
-  User,
   Menu,
   X,
-  ClipboardList,
-  Lightbulb,
-  CheckSquare,
+  Search,
 } from "lucide-react"
 import { useAuthGuard } from "@/lib/auth"
 import { ReadinessProvider } from "@/components/readiness-provider"
+import { CommandPalette } from "@/components/ui-kit"
 
 const navItems = [
-  { name: "Overview", href: "/policy", icon: LayoutDashboard },
-  { name: "Skill Demand", href: "/policy/skill-demand", icon: TrendingUp },
-  { name: "Workforce Skill Gaps", href: "/policy/workforce-skill-gaps", icon: GitCompare },
-  { name: "Course Recommendations", href: "/policy/course-recommendations", icon: Lightbulb },
-  { name: "District Plan", href: "/policy/district-plan", icon: ClipboardList },
-  { name: "Employer Validation", href: "/policy/employer-validation", icon: CheckSquare },
-  { name: "Job Market Trends", href: "/policy/job-market-trends", icon: BarChart3 },
-  { name: "Geographic Insights", href: "/policy/geographic-insights", icon: MapPin },
+  { name: "Overview", href: "/policy" },
+  { name: "Skill Demand", href: "/policy/skill-demand" },
+  { name: "Skill Gaps", href: "/policy/workforce-skill-gaps" },
+  { name: "Course Recommendations", href: "/policy/course-recommendations" },
+  { name: "District Plan", href: "/policy/district-plan" },
+  { name: "Employer Validation", href: "/policy/employer-validation" },
+  { name: "Job Market Trends", href: "/policy/job-market-trends" },
+  { name: "Geographic Insights", href: "/policy/geographic-insights" },
 ]
 
 export default function PolicyLayout({
@@ -41,15 +35,28 @@ export default function PolicyLayout({
   const pathname = usePathname()
   const { authorized, userName, logout } = useAuthGuard("policymaker")
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  // Global Ctrl+K / Cmd+K shortcut for Command Palette
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setPaletteOpen((prev) => !prev)
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown)
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown)
+  }, [])
+
+  // Mobile menu sheet scroll lock & Escape
   useEffect(() => {
     if (!mobileMenuOpen) return
-
     const originalOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
 
@@ -67,189 +74,241 @@ export default function PolicyLayout({
 
   if (!authorized) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-400">
+      <div
+        data-mood="policy"
+        className="flex min-h-screen items-center justify-center bg-background text-muted-foreground text-sm"
+      >
         Authenticating...
       </div>
     )
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
-      {/* Mobile drawer portaled into document.body */}
-      {mobileMenuOpen &&
-        mounted &&
-        createPortal(
-          <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
-            {/* Backdrop */}
+    <MotionConfig reducedMotion="user">
+      <div
+        data-mood="policy"
+        className="min-h-dvh flex flex-col bg-background text-foreground"
+      >
+        {/* Mobile labelled menu sheet (< 768px) portaled to document.body */}
+        {mobileMenuOpen &&
+          mounted &&
+          createPortal(
             <div
-              className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-160"
-              onClick={() => setMobileMenuOpen(false)}
-              aria-hidden="true"
-            />
+              data-mood="policy"
+              className="fixed inset-0 z-[70] md:hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Policymaker Navigation Menu"
+            >
+              <div
+                className="fixed inset-0 bg-slate-950/45"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-hidden="true"
+              />
 
-            {/* Mobile panel */}
-            <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-slate-950 text-slate-200 border-r border-slate-800 flex flex-col h-[100dvh] shadow-raised animate-drawer-in">
-              <div className="p-5 border-b border-slate-800 shrink-0">
-                <div className="flex items-center justify-between">
-                  <Link href="/" className="flex items-center gap-2.5" onClick={() => setMobileMenuOpen(false)}>
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-resting">
-                      <Compass className="h-5 w-5" />
+              <div className="fixed inset-x-0 top-0 z-[80] max-h-[85dvh] overflow-y-auto bg-background border-b border-border shadow-raised p-4 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <Compass className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <span className="font-serif text-base font-bold text-foreground">
+                      Policymaker Sections
                     </span>
-                    <span className="text-lg font-bold tracking-tight text-white">SkillPath</span>
-                  </Link>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="rounded p-1 text-slate-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    aria-label="Close sidebar"
+                    aria-label="Close menu"
+                    className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <X className="h-5 w-5" />
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="mt-3">
-                  <span className="inline-block rounded border border-slate-800 bg-slate-900/90 px-2 py-0.5 text-[11px] font-medium text-slate-400">
-                    Policy intelligence - Demo data
-                  </span>
+
+                <nav className="grid grid-cols-1 gap-1" aria-label="Mobile Policymaker Navigation">
+                  {navItems.map((item) => {
+                    const isActive =
+                      item.href === "/policy"
+                        ? pathname === "/policy"
+                        : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                          isActive
+                            ? "bg-primary/10 text-primary font-semibold"
+                            : "text-foreground hover:bg-muted/60"
+                        }`}
+                      >
+                        {item.name}
+                      </Link>
+                    )
+                  })}
+                </nav>
+
+                <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-foreground">Policymaker</span>
+                    <span className="text-border">|</span>
+                    <Link
+                      href="/student"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="text-muted-foreground hover:text-primary font-medium"
+                    >
+                      Student view
+                    </Link>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      logout()
+                    }}
+                    className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground font-medium"
+                  >
+                    <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Log out</span>
+                  </button>
                 </div>
               </div>
+            </div>,
+            document.body
+          )}
 
-              <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-                {navItems.map((item) => {
-                  const Icon = item.icon
-                  const isActive =
-                    item.href === "/policy"
-                      ? pathname === "/policy"
-                      : pathname === item.href || pathname.startsWith(`${item.href}/`)
+        {/* Command Palette (Ctrl+K) */}
+        <CommandPalette
+          isOpen={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+        />
 
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium transition-all duration-150 ${
-                        isActive
-                          ? "bg-primary text-primary-foreground font-semibold shadow-resting"
-                          : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span>{item.name}</span>
-                    </Link>
-                  )
-                })}
-              </nav>
-
-              <div className="mt-auto shrink-0 p-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false)
-                    logout()
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors duration-120 active:translate-y-[1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                >
-                  <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>Log out</span>
-                </button>
-              </div>
-            </aside>
-          </div>,
-          document.body
-        )}
-
-      {/* Desktop Left Sidebar (never scrolls with page, logout pinned at bottom) */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:shrink-0 bg-slate-950 text-slate-200 border-r border-slate-800 h-full overflow-hidden">
-        {/* Logo & Workspace label */}
-        <div className="p-5 border-b border-slate-800 shrink-0">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-resting transition-transform group-hover:scale-105">
-                <Compass className="h-5 w-5" />
-              </span>
-              <span className="text-lg font-bold tracking-tight text-white">SkillPath</span>
-            </Link>
-          </div>
-          <div className="mt-3">
-            <span className="inline-block rounded border border-slate-800 bg-slate-900/90 px-2 py-0.5 text-[11px] font-medium text-slate-400">
-              Policy intelligence - Demo data
-            </span>
-          </div>
-        </div>
-
-        {/* Navigation - only this part scrolls if window is very short */}
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive =
-              item.href === "/policy"
-                ? pathname === "/policy"
-                : pathname === item.href || pathname.startsWith(`${item.href}/`)
-
-            return (
+        {/* Editorial Masthead Shell (light paper, sticky section tabs, no dark chrome) */}
+        <header className="sticky top-0 z-30 bg-background border-b border-border">
+          {/* Row 1: Brand, Command Palette Trigger, Audience Switch, Log out */}
+          <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-3">
+            {/* Brand */}
+            <div className="flex items-center gap-3 shrink-0">
               <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium transition-all duration-150 ${
-                  isActive
-                    ? "bg-primary text-primary-foreground font-semibold shadow-resting"
-                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
-                }`}
+                href="/"
+                className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>{item.name}</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                  <Compass className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="font-serif text-lg font-bold tracking-tight text-foreground">
+                  SkillPath
+                </span>
               </Link>
-            )
-          })}
-        </nav>
+              <span className="hidden sm:inline-block text-[11px] text-muted-foreground border-l border-border pl-3">
+                Policy edition &middot; Synthetic data
+              </span>
+            </div>
 
-        {/* Sidebar Footer / Log out pinned at the bottom */}
-        <div className="mt-auto shrink-0 p-3 border-t border-slate-800">
-          <button
-            type="button"
-            onClick={logout}
-            className="flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors duration-120 active:translate-y-[1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-          >
-            <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Log out</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        {/* Top bar with user name - stays visible */}
-        <header className="h-14 shrink-0 border-b border-border bg-background/90 backdrop-blur-xs px-4 sm:px-6 flex items-center justify-between z-30">
-          <div className="flex items-center gap-3">
+            {/* Global Search / Command Palette Trigger */}
             <button
               type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Open sidebar menu"
+              onClick={() => setPaletteOpen(true)}
+              className="flex-1 max-w-md flex items-center justify-between gap-2 px-3 py-1.5 rounded-md border border-border bg-surface text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Search skills, districts, courses (Ctrl K)"
             >
-              <Menu className="h-5 w-5" />
+              <span className="inline-flex items-center gap-2 min-w-0">
+                <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="hidden sm:inline">Search skills, districts, courses</span>
+                <span className="sm:hidden">Search...</span>
+              </span>
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground shrink-0">
+                Ctrl K
+              </kbd>
             </button>
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Workforce Intelligence Portal
-            </span>
+
+            {/* Right controls: Audience Switch + User + Log out */}
+            <div className="flex items-center gap-3 shrink-0">
+              {/* Audience Switch */}
+              <div
+                className="hidden md:flex items-center gap-1 text-xs border-r border-border pr-3"
+                aria-label="Audience switch"
+              >
+                <span className="font-semibold text-foreground px-2 py-1 border-b-2 border-primary">
+                  Policymaker
+                </span>
+                <Link
+                  href="/student"
+                  className="text-muted-foreground hover:text-foreground px-2 py-1 transition-colors"
+                >
+                  Student
+                </Link>
+              </div>
+
+              <span className="hidden lg:inline text-xs text-muted-foreground">
+                {userName}
+              </span>
+
+              <button
+                type="button"
+                onClick={logout}
+                className="hidden md:inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground px-2 py-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Log out</span>
+              </button>
+
+              {/* Mobile menu trigger (< 768px) */}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className="md:hidden inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Open navigation menu"
+              >
+                <Menu className="h-4 w-4" aria-hidden="true" />
+                <span>Menu</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 shadow-resting text-xs">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <User className="h-3 w-3" aria-hidden="true" />
-              </span>
-              <span className="font-medium text-foreground">{userName}</span>
-            </div>
+          {/* Row 2: Section Tabs with Sliding Underline Indicator (Desktop >= 768px) */}
+          <div className="hidden md:block border-t border-border/60 bg-background">
+            <nav
+              className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-5 overflow-x-auto"
+              aria-label="Policymaker Navigation"
+            >
+              {navItems.map((item) => {
+                const isActive =
+                  item.href === "/policy"
+                    ? pathname === "/policy"
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`)
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`relative py-2.5 text-xs whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xs ${
+                      isActive
+                        ? "font-semibold text-primary"
+                        : "font-medium text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span>{item.name}</span>
+                    {isActive && (
+                      <motion.div
+                        layoutId="policy-masthead-underline"
+                        transition={{ type: "spring", stiffness: 420, damping: 36 }}
+                        className="absolute inset-x-0 bottom-0 h-0.5 bg-primary"
+                      />
+                    )}
+                  </Link>
+                )
+              })}
+            </nav>
           </div>
         </header>
 
-        {/* Page children - the ONLY scrolling container */}
+        {/* Main Content: Centred Editorial Container */}
         <ReadinessProvider>
-          <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto overscroll-contain">
+          <main className="flex-1 w-full max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             {children}
           </main>
         </ReadinessProvider>
       </div>
-    </div>
+    </MotionConfig>
   )
 }

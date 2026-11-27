@@ -859,7 +859,7 @@ export default function CareerNavigatorPage() {
                   Postings Analyzed
                 </span>
                 <span className="font-mono text-xs text-muted-foreground">
-                  {selectedAlignment.postingsInScope.toLocaleString()}
+                  {selectedAlignment.postingsInScope.toLocaleString("en-IN")}
                 </span>
               </div>
             </div>

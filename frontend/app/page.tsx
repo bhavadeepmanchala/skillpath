@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { ArrowRight, ExternalLink } from "lucide-react"
+import { ArrowRight, ExternalLink, RefreshCw, Compass } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 import {
   fetchDemandSummary,
@@ -10,38 +10,22 @@ import {
   type DemandSummary,
   type DemandTrendsResponse,
 } from "@/lib/demand-api"
-import { useCountUp } from "@/components/ui-kit/motion-hooks"
 import { Skeleton } from "@/components/ui-kit/skeleton"
 import { ReadinessProvider } from "@/components/readiness-provider"
-
-function CountUpItem({
-  label,
-  value,
-  loading,
-  enabled,
-}: {
-  label: string
-  value: number | null
-  loading: boolean
-  enabled: boolean
-}) {
-  const count = useCountUp(value ?? 0, 500, enabled)
-
-  return (
-    <div className="rounded-lg border border-border bg-card p-4 sm:p-5 shadow-resting">
-      <div className="text-xs font-normal leading-4 text-muted-foreground">{label}</div>
-      <div className="mt-2 text-2xl sm:text-3xl font-bold font-mono tracking-tight text-foreground tabular-nums leading-7">
-        {loading ? (
-          <Skeleton className="h-8 w-20" />
-        ) : value !== null ? (
-          count.toLocaleString()
-        ) : (
-          "—"
-        )}
-      </div>
-    </div>
-  )
-}
+import {
+  BigNumber,
+  FindingHeadline,
+  SourceCaption,
+  SectionRule,
+} from "@/components/ui-kit/editorial"
+import { DeltaBadge } from "@/components/ui-kit/delta-badge"
+import { LowSampleBadge } from "@/components/ui-kit/data-badge"
+import {
+  buildSummaryFinding,
+  buildRisingTrendFinding,
+  formatPercent,
+  formatMonthRange,
+} from "@/lib/findings"
 
 function HomePageContent() {
   const [summary, setSummary] = useState<DemandSummary | null>(null)
@@ -55,40 +39,37 @@ function HomePageContent() {
   const figuresRef = useRef<HTMLDivElement | null>(null)
   const [figuresInView, setFiguresInView] = useState(false)
 
-  useEffect(() => {
-    let active = true
-
+  const loadSummary = () => {
+    setSummaryLoading(true)
+    setSummaryError(false)
     fetchDemandSummary()
       .then((data) => {
-        if (active) {
-          setSummary(data)
-          setSummaryLoading(false)
-        }
+        setSummary(data)
+        setSummaryLoading(false)
       })
       .catch(() => {
-        if (active) {
-          setSummaryError(true)
-          setSummaryLoading(false)
-        }
+        setSummaryError(true)
+        setSummaryLoading(false)
       })
+  }
 
-    fetchDemandTrends({ limit: 3 })
+  const loadTrends = () => {
+    setTrendsLoading(true)
+    setTrendsError(false)
+    fetchDemandTrends({ limit: 5 })
       .then((data) => {
-        if (active) {
-          setTrends(data)
-          setTrendsLoading(false)
-        }
+        setTrends(data)
+        setTrendsLoading(false)
       })
       .catch(() => {
-        if (active) {
-          setTrendsError(true)
-          setTrendsLoading(false)
-        }
+        setTrendsError(true)
+        setTrendsLoading(false)
       })
+  }
 
-    return () => {
-      active = false
-    }
+  useEffect(() => {
+    loadSummary()
+    loadTrends()
   }, [])
 
   useEffect(() => {
@@ -100,262 +81,352 @@ function HomePageContent() {
           observer.disconnect()
         }
       },
-      { threshold: 0.15 }
+      { threshold: 0.1 }
     )
     observer.observe(figuresRef.current)
     return () => observer.disconnect()
   }, [figuresInView])
 
+  const topRising = trends?.rising?.[0] || null
+  const risingFindingSentence = buildRisingTrendFinding(
+    topRising
+      ? {
+          name: topRising.name,
+          shareLatest: topRising.shareLatest,
+          change: topRising.change,
+        }
+      : null
+  )
+
+  const trendWindowText = trends
+    ? formatMonthRange(trends.latestWindow?.from, trends.latestWindow?.to)
+    : "Trailing 3-month window"
+
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground">
+    <div data-mood="neutral" className="flex min-h-dvh flex-col bg-background text-foreground">
       <Navbar />
 
       <main className="flex-1">
-        {/* Hero Section */}
-        <section className="border-b border-border py-16 sm:py-24 animate-page-enter">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 text-center">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3.5 py-1 text-xs font-medium text-muted-foreground">
-              Synthetic data demo
-            </div>
+        {/* Editorial Hero Section with Key Numbers Above the Fold */}
+        <section className="border-b border-border py-12 sm:py-20 animate-page-enter">
+          <div className="mx-auto max-w-5xl px-4 sm:px-6">
+            <div className="max-w-3xl space-y-4">
+              <div className="inline-flex items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                  Workforce Intelligence
+                </span>
+                <span className="text-muted-foreground">&middot;</span>
+                <SourceCaption showSynthetic={true} scope="India" />
+              </div>
 
-            <h1 className="mt-6 text-3xl sm:text-5xl font-bold tracking-tight text-foreground text-balance leading-tight max-w-[70ch] mx-auto">
-              See which skills employers ask for, and where training falls short.
-            </h1>
+              <h1 className="font-serif text-3xl sm:text-5xl font-bold tracking-tight text-foreground leading-[1.12] text-balance">
+                See which skills employers ask for, and where training falls short.
+              </h1>
 
-            <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-[70ch] mx-auto text-balance leading-relaxed">
-              SkillPath compares the skills demanded in job postings against what vocational and university courses teach using explainable alignment scoring on synthetic Indian workforce data.
-            </p>
-
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link
-                href="/login?role=student"
-                className="w-full sm:w-auto inline-flex items-center justify-center rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-resting transition-colors duration-120 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:translate-y-[1px]"
-              >
-                I am a Student / Job Seeker <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-              <Link
-                href="/login?role=policymaker"
-                className="w-full sm:w-auto inline-flex items-center justify-center rounded-md border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground shadow-resting transition-colors duration-120 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:translate-y-[1px]"
-              >
-                I am a Policymaker / Planner
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Live figures strip */}
-        <section className="border-b border-border py-10 bg-muted/10">
-          <div ref={figuresRef} className="mx-auto max-w-5xl px-4 sm:px-6">
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Synthetic dataset
-              </span>
-              <span className="text-xs text-muted-foreground font-mono">
-                Deterministic backend seed
-              </span>
-            </div>
-
-            {summaryError ? (
-              <p className="text-xs text-muted-foreground py-4">
-                Live figures unavailable. Start the backend to see them.
+              <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-[65ch] text-balance">
+                SkillPath compares the skills demanded in job postings against what vocational and university courses teach using explainable alignment scoring on synthetic Indian workforce data.
               </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <CountUpItem
-                  label="Total postings"
-                  value={summary?.totalPostings ?? null}
-                  loading={summaryLoading}
-                  enabled={figuresInView}
-                />
-                <CountUpItem
-                  label="Skills tracked"
-                  value={summary?.totalSkills ?? null}
-                  loading={summaryLoading}
-                  enabled={figuresInView}
-                />
-                <CountUpItem
-                  label="Target roles"
-                  value={summary?.totalRoles ?? null}
-                  loading={summaryLoading}
-                  enabled={figuresInView}
-                />
-                <CountUpItem
-                  label="Reporting districts"
-                  value={summary?.totalDistricts ?? null}
-                  loading={summaryLoading}
-                  enabled={figuresInView}
+
+              {/* Primary & Secondary Calls to Action */}
+              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <Link
+                  href="/login?role=student"
+                  className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-resting transition-colors duration-120 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:translate-y-[1px]"
+                >
+                  <span>Explore as Student / Job Seeker</span>
+                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                </Link>
+                <Link
+                  href="/login?role=policymaker"
+                  className="inline-flex items-center justify-center rounded-md border border-border bg-card px-5 py-3 text-sm font-semibold text-foreground shadow-resting transition-colors duration-120 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:translate-y-[1px]"
+                >
+                  <span>Explore as Policymaker / Planner</span>
+                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Key Live Numbers Strip - Visible on First Screen Without Scrolling */}
+            <div ref={figuresRef} className="mt-12 pt-8 border-t border-border">
+              <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 mb-6">
+                <div>
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    National Dataset Overview
+                  </h2>
+                  <div className="font-serif text-sm font-medium text-foreground mt-0.5">
+                    {summaryLoading ? (
+                      <Skeleton className="h-4 w-72 mt-1" />
+                    ) : summary ? (
+                      buildSummaryFinding(summary)
+                    ) : (
+                      "Tracking job postings and employer requirements across India."
+                    )}
+                  </div>
+                </div>
+                <SourceCaption
+                  showSynthetic={true}
+                  window={summary?.latestMonth ? `Latest: ${summary.latestMonth}` : undefined}
                 />
               </div>
-            )}
+
+              {summaryError ? (
+                <div className="rounded-lg border border-border bg-card p-6 text-center shadow-resting">
+                  <p className="text-sm text-muted-foreground">
+                    Live figures unavailable. Start the backend to see live counts.
+                  </p>
+                  <button
+                    onClick={loadSummary}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-resting"
+                  >
+                    <RefreshCw className="h-3 w-3" /> Retry
+                  </button>
+                </div>
+              ) : summaryLoading ? (
+                <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-10 w-28" />
+                      <Skeleton className="h-3 w-32" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+                  <BigNumber
+                    label="Total job postings"
+                    rawValue={summary?.totalPostings}
+                    footnote="Trailing 18-month seed"
+                    animate={figuresInView}
+                  />
+                  <BigNumber
+                    label="Skills tracked"
+                    rawValue={summary?.totalSkills}
+                    footnote="12 industry categories"
+                    animate={figuresInView}
+                  />
+                  <BigNumber
+                    label="Target occupations"
+                    rawValue={summary?.totalRoles}
+                    footnote="7 economic sectors"
+                    animate={figuresInView}
+                  />
+                  <BigNumber
+                    label="Reporting districts"
+                    rawValue={summary?.totalDistricts}
+                    footnote="Across 16 states"
+                    animate={figuresInView}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
-        {/* Rising now panel */}
-        <section className="border-b border-border py-12">
+        {/* Section 2: Rising Now Panel from /api/demand/trends */}
+        <section className="border-b border-border py-14 sm:py-18 bg-muted/20">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
-            <div className="rounded-lg border border-border bg-card p-5 sm:p-6 shadow-resting">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-border">
-                <div>
-                  <h2 className="text-base font-semibold leading-6 text-foreground">
-                    Rising skill demand
-                  </h2>
-                  <p className="mt-0.5 text-xs text-muted-foreground leading-4">
-                    Top 3 skills with largest increase in demand share nationally
-                  </p>
-                </div>
-                {trends?.latestWindow && trends?.previousWindow && (
-                  <span className="text-xs font-mono text-muted-foreground">
-                    Window: {trends.latestWindow.from} to {trends.latestWindow.to} vs{" "}
-                    {trends.previousWindow.from} to {trends.previousWindow.to}
-                  </span>
-                )}
+            <div className="rounded-xl border border-border bg-card p-6 sm:p-8 shadow-resting">
+              <div className="border-b border-border pb-5">
+                <FindingHeadline
+                  kicker="Demand Momentum"
+                  sentence={
+                    trendsLoading
+                      ? "Analyzing trailing skill demand trajectories nationally..."
+                      : risingFindingSentence
+                  }
+                >
+                  <SourceCaption
+                    scope="National (all 40 reporting districts)"
+                    window={trendWindowText}
+                    showSynthetic={true}
+                  />
+                </FindingHeadline>
               </div>
 
               {trendsLoading ? (
-                <div className="py-6 space-y-3">
-                  <Skeleton className="h-6 w-full" />
-                  <Skeleton className="h-6 w-full" />
-                  <Skeleton className="h-6 w-full" />
+                <div className="divide-y divide-border pt-4">
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <div key={idx} className="flex items-center justify-between py-3.5">
+                      <div className="space-y-1">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                      <Skeleton className="h-6 w-28" />
+                    </div>
+                  ))}
                 </div>
               ) : trendsError ? (
-                <p className="text-xs text-muted-foreground py-4">
-                  Live figures unavailable. Start the backend to see them.
-                </p>
+                <div className="py-8 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    Unable to load trend signals. Ensure backend is running.
+                  </p>
+                  <button
+                    onClick={loadTrends}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted shadow-resting"
+                  >
+                    <RefreshCw className="h-3 w-3" /> Retry
+                  </button>
+                </div>
               ) : trends && trends.rising && trends.rising.length > 0 ? (
-                <div className="divide-y divide-border mt-2">
-                  {trends.rising.slice(0, 3).map((item, index) => {
-                    const changePp = (item.change * 100).toFixed(1)
-                    const isPositive = item.change >= 0
+                <div className="mt-2 divide-y divide-border">
+                  {trends.rising.slice(0, 5).map((item, index) => {
+                    const isLow = (item.postingsLatest ?? 0) < 30
                     return (
                       <div
                         key={item.skillId}
-                        className="flex items-center justify-between py-3 text-sm"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3.5 gap-2 transition-colors duration-120 hover:bg-muted/30 -mx-2 px-2 rounded"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <span className="text-xs font-mono text-muted-foreground w-4">
+                          <span className="font-mono text-xs text-muted-foreground w-6 shrink-0">
                             #{index + 1}
                           </span>
-                          <span className="font-medium text-foreground truncate">
-                            {item.name}
-                          </span>
-                          <span className="hidden sm:inline-block text-xs text-muted-foreground">
-                            &middot; {item.category}
-                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-serif font-semibold text-foreground text-sm sm:text-base truncate">
+                                {item.name}
+                              </span>
+                              {isLow && <LowSampleBadge threshold={30} />}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {item.category}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0 font-mono text-xs">
-                          <span className="tabular-nums text-muted-foreground">
-                            {(item.shareLatest * 100).toFixed(1)}% share
+
+                        <div className="flex items-center gap-4 self-end sm:self-auto font-mono text-xs shrink-0">
+                          <span className="text-muted-foreground tabular-nums">
+                            {formatPercent(item.shareLatest)} demand share
                           </span>
-                          <span
-                            className={`rounded px-1.5 py-0.5 font-semibold ${
-                              isPositive
-                                ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300"
-                                : "bg-destructive/10 text-destructive"
-                            }`}
-                          >
-                            {isPositive ? `+${changePp}` : changePp} pp
-                          </span>
+                          <DeltaBadge value={item.change} asPercentagePoints={false} size="sm" />
                         </div>
                       </div>
                     )
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground py-4">
-                  No trend signals currently recorded.
+                <p className="py-6 text-xs text-muted-foreground">
+                  No trend signals currently recorded in the catalogue.
                 </p>
               )}
             </div>
           </div>
         </section>
 
-        {/* How it works */}
-        <section id="how-it-works" className="scroll-mt-20 border-b border-border py-16 sm:py-20 bg-muted/15">
+        {/* Section 3: How It Works & Transparent Formulas */}
+        <section id="how-it-works" className="scroll-mt-20 border-b border-border py-16 sm:py-20">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
-            <div className="max-w-[70ch]">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-7">
-                How it works
+            <div className="max-w-[70ch] space-y-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                Methodology &amp; Architecture
+              </span>
+              <h2 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-tight">
+                An explainable three-step pipeline comparing demand to supply.
               </h2>
-              <p className="mt-2 text-sm sm:text-base text-muted-foreground leading-relaxed">
-                An explainable three-step pipeline comparing employer demand signals to training supply.
+              <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                SkillPath avoids opaque black-box recommendations. Every score and delta is computed deterministically from synthetic labor records.
               </p>
             </div>
 
             <div className="mt-10 grid gap-6 sm:grid-cols-3">
-              <div className="rounded-lg border border-border bg-card p-5 shadow-resting">
-                <div className="text-xs font-bold uppercase tracking-wider text-primary">
+              <div className="rounded-lg border border-border bg-card p-6 shadow-resting">
+                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">
                   Step 01
                 </div>
-                <h3 className="mt-2 text-base font-semibold leading-6 text-foreground">
-                  1. Demand
+                <h3 className="font-serif text-lg font-semibold text-foreground mt-2">
+                  1. Employer Demand
                 </h3>
                 <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                  Job postings and the skills they mention across occupations, industry sectors, and geographic districts.
+                  Extracts skills mentioned across 40,000 job postings, grouped by occupation role, district location, and monthly time window.
                 </p>
               </div>
 
-              <div className="rounded-lg border border-border bg-card p-5 shadow-resting">
-                <div className="text-xs font-bold uppercase tracking-wider text-primary">
+              <div className="rounded-lg border border-border bg-card p-6 shadow-resting">
+                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">
                   Step 02
                 </div>
-                <h3 className="mt-2 text-base font-semibold leading-6 text-foreground">
-                  2. Supply
+                <h3 className="font-serif text-lg font-semibold text-foreground mt-2">
+                  2. Training Supply
                 </h3>
                 <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                  What each vocational or university course teaches, tracked by duration, linked roles, and curriculum skills.
+                  Catalogs 24 courses and their offered seats across reporting districts, mapping taught skills and training durations to target occupations.
                 </p>
               </div>
 
-              <div className="rounded-lg border border-border bg-card p-5 shadow-resting">
-                <div className="text-xs font-bold uppercase tracking-wider text-primary">
+              <div className="rounded-lg border border-border bg-card p-6 shadow-resting">
+                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">
                   Step 03
                 </div>
-                <h3 className="mt-2 text-base font-semibold leading-6 text-foreground">
-                  3. Compare
+                <h3 className="font-serif text-lg font-semibold text-foreground mt-2">
+                  3. Explainable Alignment
                 </h3>
                 <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                  Explainable readiness percentages, missing-skill learning roadmaps, and course-seat oversupply flags.
+                  Computes curriculum coverage, missing skill roadmaps for learners, and seat-to-openings oversupply flags for district planners.
                 </p>
               </div>
             </div>
 
-            <div className="mt-8">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                Core scoring formula
+            {/* Core Scoring Formula Box */}
+            <div className="mt-8 rounded-lg border border-border bg-card p-5 shadow-resting">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                Core scoring formulas (deterministic backend logic)
               </div>
-              <pre className="font-mono text-xs p-3.5 rounded-lg border border-border bg-card text-foreground overflow-x-auto shadow-resting">
-Demand share = postings that mention a skill / all postings for the role
-              </pre>
+              <div className="grid gap-3 sm:grid-cols-3 font-mono text-xs">
+                <div className="p-3 rounded bg-muted/30 border border-border/60">
+                  <span className="font-semibold text-foreground block mb-1">Demand Share</span>
+                  <code className="text-muted-foreground block text-[11px]">
+                    postings_with_skill / all_postings_for_role
+                  </code>
+                </div>
+                <div className="p-3 rounded bg-muted/30 border border-border/60">
+                  <span className="font-semibold text-foreground block mb-1">Course Coverage</span>
+                  <code className="text-muted-foreground block text-[11px]">
+                    sum(taught_skill_shares) / sum(top_15_shares)
+                  </code>
+                </div>
+                <div className="p-3 rounded bg-muted/30 border border-border/60">
+                  <span className="font-semibold text-foreground block mb-1">Oversupply Ratio</span>
+                  <code className="text-muted-foreground block text-[11px]">
+                    offered_seats / estimated_local_openings
+                  </code>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Students & Planners two-column section */}
-        <section className="border-b border-border py-16 sm:py-20">
+        {/* Section 4: Two-Audience Breakdown */}
+        <section className="border-b border-border py-16 sm:py-20 bg-muted/15">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
             <div className="grid gap-8 md:grid-cols-2">
-              {/* Students column */}
-              <div id="students" className="scroll-mt-20 rounded-lg border border-border bg-card p-6 flex flex-col justify-between shadow-resting">
+              {/* Students card */}
+              <div
+                id="students"
+                className="scroll-mt-20 rounded-xl border border-border bg-card p-6 sm:p-8 flex flex-col justify-between shadow-resting"
+              >
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight text-foreground leading-7">
-                    For Students &amp; Job Seekers
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                    For Job Seekers
+                  </div>
+                  <h2 className="font-serif text-2xl font-bold tracking-tight text-foreground mt-1">
+                    Students &amp; Career Navigators
                   </h2>
                   <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                    Measure your current profile against actual demand requirements.
+                    Evaluate your skill set against employer expectations and target the gaps that matter most.
                   </p>
 
                   <ul className="mt-6 space-y-3 text-xs sm:text-sm text-foreground">
                     <li className="flex items-start gap-2.5">
-                      <span className="font-mono font-bold text-primary shrink-0">&bull;</span>
-                      <span>Pick a target occupation profile from 18 tracked roles.</span>
+                      <span className="font-serif font-bold text-primary shrink-0">&bull;</span>
+                      <span>Target occupation profiles across 18 tracked roles.</span>
                     </li>
                     <li className="flex items-start gap-2.5">
-                      <span className="font-mono font-bold text-primary shrink-0">&bull;</span>
-                      <span>Tick skills you possess to calculate explainable readiness.</span>
+                      <span className="font-serif font-bold text-primary shrink-0">&bull;</span>
+                      <span>Tick current skills to compute transparent readiness percentages.</span>
                     </li>
                     <li className="flex items-start gap-2.5">
-                      <span className="font-mono font-bold text-primary shrink-0">&bull;</span>
-                      <span>View a prioritized learning roadmap and covering courses.</span>
+                      <span className="font-serif font-bold text-primary shrink-0">&bull;</span>
+                      <span>Receive an ordered skill roadmap and covering course catalogue.</span>
                     </li>
                   </ul>
                 </div>
@@ -363,35 +434,42 @@ Demand share = postings that mention a skill / all postings for the role
                 <div className="mt-8 pt-4 border-t border-border">
                   <Link
                     href="/login?role=student"
-                    className="inline-flex items-center text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded transition-colors duration-120"
+                    className="inline-flex items-center text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded transition-colors duration-120"
                   >
-                    Explore as a student <ArrowRight className="ml-1.5 h-4 w-4" />
+                    <span>Launch Career Navigator</span>
+                    <ArrowRight className="ml-1.5 h-4 w-4" />
                   </Link>
                 </div>
               </div>
 
-              {/* Planners column */}
-              <div id="planners" className="scroll-mt-20 rounded-lg border border-border bg-card p-6 flex flex-col justify-between shadow-resting">
+              {/* Planners card */}
+              <div
+                id="planners"
+                className="scroll-mt-20 rounded-xl border border-border bg-card p-6 sm:p-8 flex flex-col justify-between shadow-resting"
+              >
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight text-foreground leading-7">
-                    For Planners &amp; Policymakers
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                    For Decision Makers
+                  </div>
+                  <h2 className="font-serif text-2xl font-bold tracking-tight text-foreground mt-1">
+                    Planners &amp; Policymakers
                   </h2>
                   <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                    Detect macro labor shortages and misaligned training capacity.
+                    Identify district-level shortages, flag obsolete courses, and plan vocational seat allocations.
                   </p>
 
                   <ul className="mt-6 space-y-3 text-xs sm:text-sm text-foreground">
                     <li className="flex items-start gap-2.5">
-                      <span className="font-mono font-bold text-primary shrink-0">&bull;</span>
+                      <span className="font-serif font-bold text-primary shrink-0">&bull;</span>
                       <span>Monitor skill demand and hiring volumes across 40 reporting districts.</span>
                     </li>
                     <li className="flex items-start gap-2.5">
-                      <span className="font-mono font-bold text-primary shrink-0">&bull;</span>
-                      <span>Track emerging and declining skill trajectories over 3-month windows.</span>
+                      <span className="font-serif font-bold text-primary shrink-0">&bull;</span>
+                      <span>Track curriculum obsolescence and oversupply ratios (&gt;1.5x openings).</span>
                     </li>
                     <li className="flex items-start gap-2.5">
-                      <span className="font-mono font-bold text-primary shrink-0">&bull;</span>
-                      <span>Review curriculum coverage scores and seats-to-openings oversupply flags.</span>
+                      <span className="font-serif font-bold text-primary shrink-0">&bull;</span>
+                      <span>Generate actionable district training plans with recommended seat shifts.</span>
                     </li>
                   </ul>
                 </div>
@@ -399,9 +477,10 @@ Demand share = postings that mention a skill / all postings for the role
                 <div className="mt-8 pt-4 border-t border-border">
                   <Link
                     href="/login?role=policymaker"
-                    className="inline-flex items-center text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded transition-colors duration-120"
+                    className="inline-flex items-center text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded transition-colors duration-120"
                   >
-                    Explore as a planner <ArrowRight className="ml-1.5 h-4 w-4" />
+                    <span>Launch Policy Intelligence</span>
+                    <ArrowRight className="ml-1.5 h-4 w-4" />
                   </Link>
                 </div>
               </div>
@@ -409,23 +488,37 @@ Demand share = postings that mention a skill / all postings for the role
           </div>
         </section>
 
-        {/* What is real, what is synthetic */}
-        <section className="border-b border-border bg-muted/15 py-14">
+        {/* Section 5: Transparency: What is real, what is synthetic */}
+        <section className="border-b border-border py-14 sm:py-18">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
-            <h2 className="text-lg font-bold tracking-tight text-foreground leading-7">
-              What is real, what is synthetic
-            </h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-3 text-xs sm:text-sm text-muted-foreground">
-              <div className="rounded-md border border-border bg-card p-4 shadow-resting">
-                <div className="font-semibold text-foreground mb-1">Deterministic Dataset</div>
-                All 40,000 job postings, 81 skills, and 24 courses are generated with a fixed random seed.
+            <div className="max-w-[70ch]">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Data Transparency
+              </span>
+              <h2 className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1">
+                What is real, what is synthetic
+              </h2>
+            </div>
+
+            <div className="mt-6 grid gap-6 sm:grid-cols-3 text-xs sm:text-sm text-muted-foreground">
+              <div className="rounded-lg border border-border bg-card p-5 shadow-resting">
+                <div className="font-serif font-semibold text-foreground text-sm mb-1">
+                  Deterministic Dataset
+                </div>
+                All 40,000 job postings, 81 skills, and 24 courses are generated with a fixed random seed. Numbers are reproducible across environments.
               </div>
-              <div className="rounded-md border border-border bg-card p-4 shadow-resting">
-                <div className="font-semibold text-foreground mb-1">Tested Backend Code</div>
-                Formulas for demand share, growth factors, coverage, and oversupply run in Java unit-tested services.
+
+              <div className="rounded-lg border border-border bg-card p-5 shadow-resting">
+                <div className="font-serif font-semibold text-foreground text-sm mb-1">
+                  Tested Backend Code
+                </div>
+                Formulas for demand share, growth factors, curriculum coverage, and oversupply ratios run in Java unit-tested services.
               </div>
-              <div className="rounded-md border border-border bg-card p-4 shadow-resting">
-                <div className="font-semibold text-foreground mb-1">Demo Environment</div>
+
+              <div className="rounded-lg border border-border bg-card p-5 shadow-resting">
+                <div className="font-serif font-semibold text-foreground text-sm mb-1">
+                  Demo Environment
+                </div>
                 Login is a client-side demo with no real user accounts. Your ticks and role selections stay in your browser.
               </div>
             </div>
@@ -436,15 +529,21 @@ Demand share = postings that mention a skill / all postings for the role
       {/* Footer */}
       <footer className="border-t border-border py-8 bg-background">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-          <p>Synthetic data. Demo login only.</p>
+          <div className="flex items-center gap-2">
+            <Compass className="h-4 w-4 text-primary" />
+            <span className="font-serif font-semibold text-foreground">SkillPath</span>
+            <span>&middot;</span>
+            <span>Synthetic workforce data demonstration</span>
+          </div>
+
           <a
             href="https://github.com/bhavadeepmanchala/skillpath"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 hover:text-foreground transition-colors duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded px-1 active:translate-y-[1px]"
+            className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1 active:translate-y-[1px]"
           >
             <span>GitHub repository</span>
-            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
           </a>
         </div>
       </footer>

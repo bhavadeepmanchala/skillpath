@@ -8,13 +8,14 @@ import {
   MinusCircle,
   MapPin,
   Calendar,
-  Layers,
   ChevronRight,
   Info,
   AlertCircle,
   CheckCircle2,
   TrendingDown,
   TrendingUp,
+  ArrowRight,
+  Search,
 } from "lucide-react"
 import {
   fetchCourses,
@@ -30,19 +31,30 @@ import {
 } from "@/lib/demand-api"
 import {
   PageHeader,
-  SectionCard,
+  FindingHeadline,
+  BigNumber,
+  FigureRow,
+  SectionHeader,
+  SourceCaption,
   FilterBar,
   SelectField,
-  KpiCard,
-  KpiCardSkeleton,
-  TableSkeleton,
+  DumbbellRow,
+  DumbbellScaleHeader,
+  DeltaBadge,
+  LowSampleBadge,
   Drawer,
   ErrorState,
   EmptyState,
-  LowSampleBadge,
-  DeltaBadge,
-  DataBadge,
+  Skeleton,
+  TableSkeleton,
 } from "@/components/ui-kit"
+import { computeDumbbellScale } from "@/lib/dumbbell"
+import {
+  formatPercent,
+  formatInteger,
+  pluralize,
+  buildRecommendationFinding,
+} from "@/lib/findings"
 
 function CourseRecommendationsContent() {
   const searchParams = useSearchParams()
@@ -71,6 +83,12 @@ function CourseRecommendationsContent() {
   const [error, setError] = useState<string | null>(null)
   const activeRequestKey = useRef<string>("")
 
+  // Search & Progressive disclosure state
+  const [addSearch, setAddSearch] = useState("")
+  const [retireSearch, setRetireSearch] = useState("")
+  const [showAllAdd, setShowAllAdd] = useState(false)
+  const [showAllRetire, setShowAllRetire] = useState(false)
+
   // ---------------------------------------------------------------------------
   // Drawer State
   // ---------------------------------------------------------------------------
@@ -78,9 +96,7 @@ function CourseRecommendationsContent() {
   const [selectedSkill, setSelectedSkill] = useState<CourseRecommendationItem | null>(null)
   const [drawerType, setDrawerType] = useState<"ADD" | "RETIRE" | null>(null)
 
-  // ---------------------------------------------------------------------------
   // 1. Initial Load: Course Catalog & District Catalog
-  // ---------------------------------------------------------------------------
   useEffect(() => {
     let isMounted = true
 
@@ -96,13 +112,11 @@ function CourseRecommendationsContent() {
         ])
         if (!isMounted) return
 
-        // Sort courses alphabetically by name
         const sortedCourses = [...courseList].sort((a, b) =>
           a.name.localeCompare(b.name)
         )
         setCourses(sortedCourses)
 
-        // Sort districts alphabetically by name
         const sortedDistricts = [...districtResp.districts].sort((a, b) =>
           a.name.localeCompare(b.name)
         )
@@ -142,9 +156,7 @@ function CourseRecommendationsContent() {
     }
   }, [courseParam, districtParam])
 
-  // ---------------------------------------------------------------------------
   // 2. Load Recommendations with Cache & Stale Request Cancellation
-  // ---------------------------------------------------------------------------
   const loadRecommendations = useCallback(
     async (courseId: string, districtId: string) => {
       if (!courseId) {
@@ -157,7 +169,6 @@ function CourseRecommendationsContent() {
       const key = `${courseId}:${districtId || "national"}`
       activeRequestKey.current = key
 
-      // Check cache first
       if (cache[key]) {
         setData(cache[key])
         setLoading(false)
@@ -174,7 +185,6 @@ function CourseRecommendationsContent() {
           districtId ? Number(districtId) : null
         )
 
-        // Ensure this is still the active request
         if (activeRequestKey.current === key) {
           setCache((prev) => ({ ...prev, [key]: res }))
           setData(res)
@@ -202,12 +212,10 @@ function CourseRecommendationsContent() {
     loadRecommendations(selectedCourseId, selectedDistrictId)
   }, [selectedCourseId, selectedDistrictId, loadRecommendations])
 
-  // ---------------------------------------------------------------------------
   // Select Options
-  // ---------------------------------------------------------------------------
   const courseOptions = useMemo(() => {
     return [
-      { label: "Select a course...", value: "" },
+      { label: "Select a course to analyze...", value: "" },
       ...courses.map((c) => ({
         label: c.name,
         value: String(c.id),
@@ -234,11 +242,11 @@ function CourseRecommendationsContent() {
   const handleResetFilters = () => {
     setSelectedCourseId("")
     setSelectedDistrictId("")
+    setAddSearch("")
+    setRetireSearch("")
   }
 
-  // ---------------------------------------------------------------------------
   // Drawer Handler
-  // ---------------------------------------------------------------------------
   const handleOpenDrawer = (item: CourseRecommendationItem, type: "ADD" | "RETIRE") => {
     setSelectedSkill(item)
     setDrawerType(type)
@@ -251,16 +259,73 @@ function CourseRecommendationsContent() {
     setDrawerType(null)
   }
 
+  // Filtered Add items
+  const processedAdd = useMemo(() => {
+    if (!data?.add) return []
+    const q = addSearch.trim().toLowerCase()
+    if (!q) return data.add
+    return data.add.filter((s) => s.skillName.toLowerCase().includes(q))
+  }, [data?.add, addSearch])
+
+  const visibleAdd = useMemo(() => {
+    if (showAllAdd || processedAdd.length <= 10) return processedAdd
+    return processedAdd.slice(0, 10)
+  }, [processedAdd, showAllAdd])
+
+  // Filtered Retire items
+  const processedRetire = useMemo(() => {
+    if (!data?.retire) return []
+    const q = retireSearch.trim().toLowerCase()
+    if (!q) return data.retire
+    return data.retire.filter((s) => s.skillName.toLowerCase().includes(q))
+  }, [data?.retire, retireSearch])
+
+  const visibleRetire = useMemo(() => {
+    if (showAllRetire || processedRetire.length <= 10) return processedRetire
+    return processedRetire.slice(0, 10)
+  }, [processedRetire, showAllRetire])
+
+  // Maximum share for bar normalization
+  const maxAddShare = useMemo(() => {
+    if (!data?.add || data.add.length === 0) return 0.5
+    return Math.max(...data.add.map((a) => a.latestShare), 0.05)
+  }, [data?.add])
+
+  const maxRetireShare = useMemo(() => {
+    if (!data?.retire || data.retire.length === 0) return 0.5
+    return Math.max(...data.retire.map((r) => r.latestShare), 0.05)
+  }, [data?.retire])
+
+  // Finding sentence calculation via shared lib/findings.ts (includes low-sample caution)
+  const findingHeadline = useMemo(() => {
+    if (!data) {
+      return "Select a course to evaluate curriculum alignment against synthetic job postings."
+    }
+    return buildRecommendationFinding({
+      courseName: data.courseName,
+      districtName: data.districtId ? selectedDistrictName : undefined,
+      addCount: data.add.length,
+      retireCount: data.retire.length,
+      topAddSkillName: data.add[0]?.skillName,
+      topAddLatestShare: data.add[0]?.latestShare,
+      postingsInScope: data.add[0]?.postingsLatest ?? data.retire[0]?.postingsLatest,
+    })
+  }, [data, selectedDistrictName])
+
   return (
-    <div className="animate-page-enter space-y-6 p-6">
-      {/* Page Header */}
+    <div className="space-y-8 animate-page-enter">
+      {/* 1. Page Header with standfirst */}
       <PageHeader
         title="Course Recommendations"
-        description="Data-driven curriculum update recommendations for courses, identifying emerging skills to add and declining skills to retire based on regional and national employer demand."
-        badge={<DataBadge label="Synthetic data" />}
+        standfirst="Data-driven curriculum update guidance: emerging skills to add and declining competencies to retire based on employer hiring demand."
+        showSyntheticBadge
+        breadcrumbs={[
+          { label: "Policymaker", href: "/policy" },
+          { label: "Course Recommendations" },
+        ]}
       />
 
-      {/* Filter Bar */}
+      {/* 2. Filter Bar: Course & District */}
       <FilterBar
         onReset={handleResetFilters}
         isFiltered={Boolean(selectedCourseId || selectedDistrictId)}
@@ -277,7 +342,7 @@ function CourseRecommendationsContent() {
 
         <SelectField
           id="district-select"
-          label="District"
+          label="Geographic scope"
           value={selectedDistrictId}
           onChange={(val) => setSelectedDistrictId(val)}
           options={districtOptions}
@@ -305,42 +370,44 @@ function CourseRecommendationsContent() {
         />
       )}
 
-      {/* State: No Course Selected Hint */}
+      {/* 3. Empty State before course selection */}
       {!coursesError && !selectedCourseId && (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/60 p-12 text-center text-card-foreground shadow-resting">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card p-12 text-center text-card-foreground shadow-resting">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
             <Lightbulb className="h-6 w-6" aria-hidden="true" />
           </div>
-          <h3 className="text-base font-semibold text-foreground">
-            Select a course to view recommendations
+          <h3 className="font-serif text-lg font-semibold text-foreground">
+            Select a course to view curriculum recommendations
           </h3>
-          <p className="mt-1.5 max-w-[60ch] text-xs leading-5 text-muted-foreground">
+          <p className="mt-1.5 max-w-[65ch] text-xs leading-relaxed text-muted-foreground">
             Choose a course from the dropdown above to view recommended curriculum updates,
-            including missing in-demand skills to add and declining skills to retire based on
+            including missing in-demand skills to add and declining competencies to retire based on
             employer job postings.
           </p>
         </div>
       )}
 
-      {/* State: Course Selected - Loading Skeletons */}
+      {/* Loading Skeletons */}
       {selectedCourseId && loading && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCardSkeleton />
-            <KpiCardSkeleton />
-            <KpiCardSkeleton />
-            <KpiCardSkeleton />
+          <div className="p-6 rounded-lg border border-border bg-card space-y-4">
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-4 w-1/3" />
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 pt-4 border-t border-border">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-8 w-24" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+              ))}
+            </div>
           </div>
-          <SectionCard title="Skills to add" subtitle="Loading curriculum recommendations...">
-            <TableSkeleton rows={5} cols={6} />
-          </SectionCard>
-          <SectionCard title="Skills to retire" subtitle="Loading retirement candidates...">
-            <TableSkeleton rows={3} cols={5} />
-          </SectionCard>
+          <TableSkeleton rows={5} cols={4} />
         </div>
       )}
 
-      {/* State: Course Selected - Error with Retry */}
+      {/* Error State */}
       {selectedCourseId && !loading && error && (
         <ErrorState
           message="Could not load recommendations for this course"
@@ -349,406 +416,436 @@ function CourseRecommendationsContent() {
         />
       )}
 
-      {/* State: Course Selected - Content */}
+      {/* Content State when course is loaded */}
       {selectedCourseId && !loading && !error && data && (
-        <div className="space-y-6">
-          {/* Summary Row */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard
-              label="Skills to Add"
-              rawValue={data.add.length}
-              footnote={
-                data.add.length === data.maxItems
-                  ? `Capped at top ${data.maxItems} items`
-                  : "Untaught high-demand skills"
-              }
-              icon={PlusCircle}
-              staggerIndex={0}
-            />
-
-            <KpiCard
-              label="Skills to Retire"
-              rawValue={data.retire.length}
-              footnote="Taught declining skills meeting 3-part rule"
-              icon={MinusCircle}
-              staggerIndex={1}
-            />
-
-            <KpiCard
-              label="Market Scope"
-              value={data.districtId ? selectedDistrictName : "All districts (National)"}
-              footnote={
-                data.districtId
-                  ? "Filtered to selected district demand"
-                  : "Aggregated across all 40 districts"
-              }
-              icon={MapPin}
-              staggerIndex={2}
-            />
-
-            <KpiCard
-              label="Observation Windows"
-              value={`${data.windowMonths} months`}
-              footnote={
-                data.latestWindow && data.previousWindow
-                  ? `${data.latestWindow.from} to ${data.latestWindow.to} vs ${data.previousWindow.from} to ${data.previousWindow.to}`
-                  : "Comparison periods"
-              }
-              icon={Calendar}
-              staggerIndex={3}
-            />
-          </div>
-
-          {/* Section 1: Skills to Add */}
-          <SectionCard
-            title="Skills to add"
-            subtitle={`Untaught skills from linked roles with demand share ≥ ${(
-              data.minShareForAdd * 100
-            ).toFixed(0)}% and at least ${data.minPostings} postings in scope. Ranked by score = demand share × (1 + max(0, relative growth)). Click any row for details.`}
-            actionSlot={
-              <span className="text-xs font-mono text-muted-foreground">
-                Showing {data.add.length} of max {data.maxItems}
-              </span>
-            }
-          >
-            {data.add.length === 0 ? (
-              <EmptyState
-                title="No skills meet the add criteria"
-                description="No untaught skills for the linked roles meet the minimum demand share threshold in this observation window."
+        <div className="space-y-8">
+          {/* Finding Headline & Open FigureRow (no KPI boxes) */}
+          <section className="space-y-6">
+            <FindingHeadline
+              kicker="Curriculum Evaluation Finding"
+              sentence={findingHeadline}
+            >
+              <SourceCaption
+                scope={`${data.courseName} · ${data.districtId ? selectedDistrictName : "National"}`}
+                window={
+                  data.latestWindow && data.previousWindow
+                    ? `${data.latestWindow.from} to ${data.latestWindow.to}`
+                    : `${data.windowMonths} months window`
+                }
+                note="Derived from synthetic job posting demand share trajectories"
               />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30 text-muted-foreground">
-                      <th className="py-2.5 px-3 font-semibold w-12 text-center">Rank</th>
-                      <th className="py-2.5 px-3 font-semibold">Skill</th>
-                      <th className="py-2.5 px-3 font-semibold text-right">Demand Share</th>
-                      <th className="py-2.5 px-3 font-semibold text-center">Trend</th>
-                      <th className="py-2.5 px-3 font-semibold text-right">Score</th>
-                      <th className="py-2.5 px-3 font-semibold text-right">Postings</th>
-                      <th className="py-2.5 px-3 font-semibold text-center w-10">
-                        <span className="sr-only">Details</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.add.map((item, index) => {
-                      const lowSample = isLowSample(
-                        item.postingsLatest,
-                        LOW_SAMPLE_THRESHOLD
-                      )
-                      return (
-                        <tr
-                          key={item.skillId}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => handleOpenDrawer(item, "ADD")}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault()
-                              handleOpenDrawer(item, "ADD")
-                            }
-                          }}
-                          className="cursor-pointer border-b border-border/50 transition-colors duration-120 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                          title={`Click to inspect numbers for ${item.skillName}`}
-                        >
-                          <td className="py-2.5 px-3 font-mono font-medium text-center text-muted-foreground">
-                            #{index + 1}
-                          </td>
-                          <td className="py-2.5 px-3 font-medium text-foreground">
-                            <div className="flex items-center gap-2">
-                              <span>{item.skillName}</span>
-                              {lowSample && <LowSampleBadge />}
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 font-mono tabular-nums text-right text-foreground">
-                            {(item.latestShare * 100).toFixed(1)}%
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <DeltaBadge value={item.trend} size="sm" />
-                          </td>
-                          <td className="py-2.5 px-3 font-mono tabular-nums text-right font-semibold text-foreground">
-                            {item.score != null ? item.score.toFixed(2) : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono tabular-nums text-right text-muted-foreground">
-                            {item.postingsLatest.toLocaleString()}
-                          </td>
-                          <td className="py-2.5 px-3 text-center text-muted-foreground">
-                            <ChevronRight className="h-3.5 w-3.5 inline-block" aria-hidden="true" />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </SectionCard>
+            </FindingHeadline>
 
-          {/* Section 2: Skills to Retire */}
-          <SectionCard
-            title="Skills to retire"
-            subtitle={`Taught skills recommended for retirement based on the 3-part rule: (1) falling momentum (trend < 0), (2) contraction ≥ ${(
-              data.retireMinDecline * 100
-            ).toFixed(0)}% relative decline, and (3) latest share ≤ ${(
-              data.retireMaxShare * 100
-            ).toFixed(0)}% (dominant core skills are preserved). Ranked by steepest relative contraction first.`}
-            actionSlot={
-              <span className="text-xs font-mono text-muted-foreground">
-                Showing {data.retire.length} of max {data.maxItems}
-              </span>
-            }
-          >
-            {data.retire.length === 0 ? (
-              <EmptyState
-                title="No taught skill meets the retire rule"
-                description="All taught skills in this course either maintain stable demand, have mild contraction (< 10%), or remain dominant core skills (> 40% share)."
+            <FigureRow columns={4}>
+              <BigNumber
+                label="Skills to Add"
+                rawValue={data.add.length}
+                footnote={
+                  data.add.length === data.maxItems
+                    ? `Capped at top ${data.maxItems} skills`
+                    : "Untaught high-demand skills"
+                }
               />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30 text-muted-foreground">
-                      <th className="py-2.5 px-3 font-semibold">Skill</th>
-                      <th className="py-2.5 px-3 font-semibold text-right">Demand Share</th>
-                      <th className="py-2.5 px-3 font-semibold text-right">Relative Growth</th>
-                      <th className="py-2.5 px-3 font-semibold text-center">Trend</th>
-                      <th className="py-2.5 px-3 font-semibold text-right">Postings</th>
-                      <th className="py-2.5 px-3 font-semibold text-center w-10">
-                        <span className="sr-only">Details</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.retire.map((item) => {
-                      const lowSample = isLowSample(
-                        item.postingsLatest,
-                        LOW_SAMPLE_THRESHOLD
-                      )
-                      const relGrowthPct = (item.relativeGrowth * 100).toFixed(1)
-                      return (
-                        <tr
-                          key={item.skillId}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => handleOpenDrawer(item, "RETIRE")}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault()
-                              handleOpenDrawer(item, "RETIRE")
-                            }
-                          }}
-                          className="cursor-pointer border-b border-border/50 transition-colors duration-120 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                          title={`Click to inspect numbers for ${item.skillName}`}
-                        >
-                          <td className="py-2.5 px-3 font-medium text-foreground">
-                            <div className="flex items-center gap-2">
-                              <span>{item.skillName}</span>
-                              {lowSample && <LowSampleBadge />}
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 font-mono tabular-nums text-right text-foreground">
-                            {(item.latestShare * 100).toFixed(1)}%
-                          </td>
-                          <td className="py-2.5 px-3 font-mono tabular-nums text-right font-medium text-rose-600 dark:text-rose-400">
-                            {item.relativeGrowth > 0 ? `+${relGrowthPct}%` : `${relGrowthPct}%`}
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <DeltaBadge value={item.trend} size="sm" />
-                          </td>
-                          <td className="py-2.5 px-3 font-mono tabular-nums text-right text-muted-foreground">
-                            {item.postingsLatest.toLocaleString()}
-                          </td>
-                          <td className="py-2.5 px-3 text-center text-muted-foreground">
-                            <ChevronRight className="h-3.5 w-3.5 inline-block" aria-hidden="true" />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </SectionCard>
+              <BigNumber
+                label="Skills to Retire"
+                rawValue={data.retire.length}
+                footnote="Meets 3-part decline rule"
+              />
+              <BigNumber
+                label="Leading Addition Share"
+                value={data.add[0] ? formatPercent(data.add[0].latestShare) : "—"}
+                footnote={data.add[0] ? data.add[0].skillName : "None recommended"}
+              />
+              <BigNumber
+                label="Deepest Contraction"
+                value={
+                  data.retire[0]
+                    ? `${(data.retire[0].relativeGrowth * 100).toFixed(1)}%`
+                    : "—"
+                }
+                footnote={data.retire[0] ? data.retire[0].skillName : "No falling taught skills"}
+              />
+            </FigureRow>
+          </section>
 
-          {/* Visible Notice */}
-          <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-center text-xs text-muted-foreground">
-            Synthetic data. Thresholds are tuned defaults, not validated.
-          </div>
+          {/* ================================================================= */}
+          {/* SIGNATURE SPLIT VIEW: Left = What this course teaches (Retire)    */}
+          {/*                       Right = What the market asks (Add)          */}
+          {/* ================================================================= */}
+          {(() => {
+            const splitScale = computeDumbbellScale(
+              [...data.retire, ...data.add].map((s) => ({
+                prev: s.previousShare * 100,
+                latest: s.latestShare * 100,
+              })),
+              { minMax: 20, step: 10, capAt: 100 }
+            )
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                {/* LEFT COLUMN: What this course teaches (flagged retire candidates) */}
+                <section className="space-y-4">
+                  <SectionHeader
+                    title="What this course teaches"
+                    subtitle={`Taught skills flagged under the 3-part retire rule (falling trend, decline ≥ ${Math.round(
+                      data.retireMinDecline * 100
+                    )}%, share ≤ ${Math.round(data.retireMaxShare * 100)}%).`}
+                    actions={
+                      data.retire.length > 0 ? (
+                        <div className="relative w-full sm:w-44">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                          <input
+                            type="text"
+                            placeholder="Filter taught..."
+                            value={retireSearch}
+                            onChange={(e) => setRetireSearch(e.target.value)}
+                            aria-label="Filter taught skills"
+                            className="w-full pl-8 pr-2.5 py-1 rounded-md border border-border bg-card text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          />
+                        </div>
+                      ) : undefined
+                    }
+                  />
+
+                  {data.retire.length === 0 ? (
+                    <EmptyState
+                      title="No taught skill meets the retire rule"
+                      description="All taught skills in this course either maintain stable demand, have mild contraction (< 10%), or remain dominant core skills (> 40% share)."
+                    />
+                  ) : processedRetire.length === 0 ? (
+                    <EmptyState
+                      title="No matching skills"
+                      description={`No taught skills matched "${retireSearch}".`}
+                    />
+                  ) : (
+                    <div>
+                      <DumbbellScaleHeader
+                        leftLabel="Taught Skill"
+                        maxScale={splitScale}
+                        unit="%"
+                        rightLabel="Prev → Latest"
+                      />
+                      <div className="divide-y divide-border/70 border-b border-border/70">
+                        {visibleRetire.map((item, index) => {
+                          const hasLowSample = isLowSample(item.postingsLatest, LOW_SAMPLE_THRESHOLD)
+                          const relDecline = `${(item.relativeGrowth * 100).toFixed(1)}%`
+                          const isSelected =
+                            drawerOpen &&
+                            drawerType === "RETIRE" &&
+                            selectedSkill?.skillId === item.skillId
+
+                          return (
+                            <DumbbellRow
+                              key={item.skillId}
+                              rank={index + 1}
+                              label={item.skillName}
+                              sublabel={`Rel. decline ${relDecline}`}
+                              previousValue={item.previousShare * 100}
+                              latestValue={item.latestShare * 100}
+                              maxScale={splitScale}
+                              previousText={formatPercent(item.previousShare)}
+                              latestText={formatPercent(item.latestShare)}
+                              tone="negative"
+                              active={isSelected}
+                              staggerIndex={index}
+                              onClick={() => handleOpenDrawer(item, "RETIRE")}
+                              badge={
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-negative-foreground bg-negative-subtle px-1.5 py-0.5 rounded border border-negative/30">
+                                    Retire
+                                  </span>
+                                  <DeltaBadge value={item.trend} size="sm" />
+                                  {hasLowSample && <LowSampleBadge />}
+                                </div>
+                              }
+                            />
+                          )
+                        })}
+                      </div>
+
+                      {processedRetire.length > 10 && (
+                        <div className="pt-3 flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            Showing {visibleRetire.length} of {processedRetire.length} skills
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowAllRetire((prev) => !prev)}
+                            className="font-semibold text-primary hover:underline rounded px-2 py-1"
+                          >
+                            {showAllRetire ? "Show top 10 only" : `Show all ${processedRetire.length} skills`}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+
+                {/* RIGHT COLUMN: What the market asks that it does not teach (Add list) */}
+                <section className="space-y-4">
+                  <SectionHeader
+                    title="What the market asks that it does not teach"
+                    subtitle={`Untaught skills with demand share ≥ ${Math.round(
+                      data.minShareForAdd * 100
+                    )}% and ≥ ${data.minPostings} postings in scope.`}
+                    actions={
+                      data.add.length > 0 ? (
+                        <div className="relative w-full sm:w-44">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                          <input
+                            type="text"
+                            placeholder="Filter market adds..."
+                            value={addSearch}
+                            onChange={(e) => setAddSearch(e.target.value)}
+                            aria-label="Filter market additions"
+                            className="w-full pl-8 pr-2.5 py-1 rounded-md border border-border bg-card text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          />
+                        </div>
+                      ) : undefined
+                    }
+                  />
+
+                  {data.add.length === 0 ? (
+                    <EmptyState
+                      title="No skills meet the add criteria"
+                      description="No untaught skills for linked roles meet the minimum demand share threshold in this observation window."
+                    />
+                  ) : processedAdd.length === 0 ? (
+                    <EmptyState
+                      title="No matching skills"
+                      description={`No add candidates matched "${addSearch}".`}
+                    />
+                  ) : (
+                    <div>
+                      <DumbbellScaleHeader
+                        leftLabel="Untaught Skill"
+                        maxScale={splitScale}
+                        unit="%"
+                        rightLabel="Prev → Latest"
+                      />
+                      <div className="divide-y divide-border/70 border-b border-border/70">
+                        {visibleAdd.map((item, index) => {
+                          const hasLowSample = isLowSample(item.postingsLatest, LOW_SAMPLE_THRESHOLD)
+                          const isSelected =
+                            drawerOpen &&
+                            drawerType === "ADD" &&
+                            selectedSkill?.skillId === item.skillId
+
+                          return (
+                            <DumbbellRow
+                              key={item.skillId}
+                              rank={index + 1}
+                              label={item.skillName}
+                              sublabel={`${formatInteger(item.postingsLatest)} openings`}
+                              previousValue={item.previousShare * 100}
+                              latestValue={item.latestShare * 100}
+                              maxScale={splitScale}
+                              previousText={formatPercent(item.previousShare)}
+                              latestText={formatPercent(item.latestShare)}
+                              tone="positive"
+                              active={isSelected}
+                              staggerIndex={index}
+                              onClick={() => handleOpenDrawer(item, "ADD")}
+                              badge={
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <DeltaBadge value={item.trend} size="sm" />
+                                  {hasLowSample && <LowSampleBadge />}
+                                  <span className="text-[11px] font-mono font-medium text-positive-foreground bg-positive-subtle px-1.5 py-0.5 rounded border border-positive/30">
+                                    {item.score != null ? `score ${item.score.toFixed(2)}` : "—"}
+                                  </span>
+                                </div>
+                              }
+                            />
+                          )
+                        })}
+                      </div>
+
+                      {processedAdd.length > 10 && (
+                        <div className="pt-3 flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            Showing {visibleAdd.length} of {processedAdd.length} skills
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowAllAdd((prev) => !prev)}
+                            className="font-semibold text-primary hover:underline rounded px-2 py-1"
+                          >
+                            {showAllAdd ? "Show top 10 only" : `Show all ${processedAdd.length} skills`}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+              </div>
+            )
+          })()}
+
+          {/* Transparency Footer Caption */}
+          <p className="pt-4 border-t border-border text-xs text-muted-foreground">
+            Synthetic data. Evaluation parameters: min share for addition = {(data.minShareForAdd * 100).toFixed(0)}%, retire min decline = {(data.retireMinDecline * 100).toFixed(0)}%, retire max share ceiling = {(data.retireMaxShare * 100).toFixed(0)}%.
+          </p>
         </div>
       )}
 
-      {/* Skill Detail Drawer */}
+      {/* 4. Detail Drawer (1-click from any row) */}
       <Drawer
         isOpen={drawerOpen}
         onClose={handleCloseDrawer}
-        title={selectedSkill?.skillName || "Skill Details"}
+        title={selectedSkill?.skillName || "Curriculum Recommendation Detail"}
         subtitle={
           selectedSkill && data
-            ? `${drawerType === "ADD" ? "Add to curriculum" : "Retire from curriculum"} · ${data.courseName}`
+            ? `${drawerType === "ADD" ? "Add to syllabus" : "Retire from syllabus"} · ${data.courseName}`
             : undefined
         }
       >
         {selectedSkill && data && (
           <div className="space-y-6 text-xs">
-            {/* Header Status Card */}
+            {/* Status card */}
             <div
               className={`rounded-lg border p-4 ${
                 drawerType === "ADD"
-                  ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-950 dark:text-emerald-100"
-                  : "border-rose-500/30 bg-rose-500/5 text-rose-950 dark:text-rose-100"
+                  ? "border-positive/30 bg-positive-subtle/50 text-positive-foreground"
+                  : "border-negative/30 bg-negative-subtle/50 text-negative-foreground"
               }`}
             >
               <div className="flex items-center gap-2 font-semibold">
                 {drawerType === "ADD" ? (
                   <>
-                    <PlusCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>Recommended for Addition</span>
+                    <PlusCircle className="h-4 w-4 text-positive" />
+                    <span>Recommended for Curriculum Addition</span>
                   </>
                 ) : (
                   <>
-                    <MinusCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                    <span>Recommended for Retirement</span>
+                    <MinusCircle className="h-4 w-4 text-negative" />
+                    <span>Recommended for Curriculum Retirement</span>
                   </>
                 )}
               </div>
               <p className="mt-1 text-muted-foreground leading-relaxed">
                 {drawerType === "ADD"
-                  ? `This skill is demanded across job postings for roles linked to ${data.courseName}, but is not currently taught in the syllabus.`
-                  : `This skill is taught in ${data.courseName}, but shows significant demand decline and remains below dominant market share.`}
+                  ? `Demanded in job postings for roles linked to ${data.courseName}, but untaught in the current syllabus.`
+                  : `Taught in ${data.courseName}, but exhibits substantial hiring contraction and remains below the dominant core threshold.`}
               </p>
             </div>
 
-            {/* Metrics Breakdown Grid */}
-            <div className="space-y-3">
+            {/* Metrics Breakdown */}
+            <div className="space-y-2.5">
               <h4 className="font-semibold text-foreground uppercase tracking-wider text-[11px]">
-                Metrics Breakdown
+                Deterministic Metrics
               </h4>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-border bg-card p-3 shadow-resting">
-                  <div className="text-muted-foreground">Latest Demand Share</div>
-                  <div className="mt-1 text-lg font-bold font-mono text-foreground">
-                    {(selectedSkill.latestShare * 100).toFixed(2)}%
+                <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Latest Share
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono text-foreground">
+                    {formatPercent(selectedSkill.latestShare)}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    Window: {data.latestWindow ? `${data.latestWindow.from} to ${data.latestWindow.to}` : "Latest"}
-                  </div>
+                  <span className="text-[10px] text-muted-foreground">
+                    {data.latestWindow ? `${data.latestWindow.from} to ${data.latestWindow.to}` : "Latest window"}
+                  </span>
                 </div>
 
-                <div className="rounded-lg border border-border bg-card p-3 shadow-resting">
-                  <div className="text-muted-foreground">Previous Demand Share</div>
-                  <div className="mt-1 text-lg font-bold font-mono text-foreground">
-                    {(selectedSkill.previousShare * 100).toFixed(2)}%
+                <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Previous Share
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono text-foreground">
+                    {formatPercent(selectedSkill.previousShare)}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    Window: {data.previousWindow ? `${data.previousWindow.from} to ${data.previousWindow.to}` : "Previous"}
-                  </div>
+                  <span className="text-[10px] text-muted-foreground">
+                    {data.previousWindow ? `${data.previousWindow.from} to ${data.previousWindow.to}` : "Previous window"}
+                  </span>
                 </div>
 
-                <div className="rounded-lg border border-border bg-card p-3 shadow-resting">
-                  <div className="text-muted-foreground">Demand Momentum (Trend)</div>
-                  <div className="mt-1">
-                    <DeltaBadge value={selectedSkill.trend} size="md" />
+                <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Demand Momentum
+                  </span>
+                  <div className="pt-0.5">
+                    <DeltaBadge value={selectedSkill.trend} size="sm" />
                   </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    Percentage point change
-                  </div>
+                  <span className="text-[10px] text-muted-foreground">
+                    Trailing percentage points
+                  </span>
                 </div>
 
-                <div className="rounded-lg border border-border bg-card p-3 shadow-resting">
-                  <div className="text-muted-foreground">Relative Growth</div>
-                  <div className="mt-1 text-lg font-bold font-mono text-foreground">
+                <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Relative Growth
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono text-foreground">
                     {selectedSkill.relativeGrowth > 0 ? "+" : ""}
                     {(selectedSkill.relativeGrowth * 100).toFixed(1)}%
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    Percentage change over base
-                  </div>
+                  <span className="text-[10px] text-muted-foreground">
+                    Relative shift over baseline
+                  </span>
                 </div>
 
-                <div className="rounded-lg border border-border bg-card p-3 shadow-resting">
-                  <div className="text-muted-foreground">Postings in Latest Window</div>
-                  <div className="mt-1 text-lg font-bold font-mono text-foreground">
-                    {selectedSkill.postingsLatest.toLocaleString()}
+                <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                    Postings in Window
+                  </span>
+                  <div className="font-serif text-xl font-bold font-mono text-foreground">
+                    {formatInteger(selectedSkill.postingsLatest)}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    Active job postings in scope
-                  </div>
+                  <span className="text-[10px] text-muted-foreground">
+                    Sample openings in scope
+                  </span>
                 </div>
 
                 {drawerType === "ADD" && (
-                  <div className="rounded-lg border border-border bg-card p-3 shadow-resting">
-                    <div className="text-muted-foreground">Candidate Score</div>
-                    <div className="mt-1 text-lg font-bold font-mono text-foreground">
-                      {selectedSkill.score != null ? selectedSkill.score.toFixed(3) : "-"}
+                  <div className="rounded-lg border border-border bg-card p-3 space-y-1">
+                    <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                      Rank Score
+                    </span>
+                    <div className="font-serif text-xl font-bold font-mono text-foreground">
+                      {selectedSkill.score != null ? selectedSkill.score.toFixed(3) : "—"}
                     </div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      share × (1 + max(0, relativeGrowth))
-                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      share × (1 + max(0, relGrowth))
+                    </span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Low Sample Warning */}
-            {isLowSample(selectedSkill.postingsLatest, LOW_SAMPLE_THRESHOLD) && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-900 dark:text-amber-200">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <div className="text-xs leading-relaxed">
-                  <span className="font-semibold">Low sample caution:</span> Fewer than{" "}
-                  {LOW_SAMPLE_THRESHOLD} job postings were observed for this skill in the latest
-                  window. Regional samples may have higher statistical variance.
-                </div>
-              </div>
-            )}
-
-            {/* Rule Verification Card */}
+            {/* Rule Checklist */}
             <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-2">
-              <div className="font-semibold text-foreground">
-                {drawerType === "ADD" ? "Why add this skill?" : "Why retire this skill?"}
-              </div>
+              <span className="font-semibold text-foreground">
+                {drawerType === "ADD" ? "Addition Rule Verification:" : "3-Part Retirement Rule Verification:"}
+              </span>
               {drawerType === "ADD" ? (
                 <ul className="space-y-1.5 text-muted-foreground">
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>
-                      Not taught in course (eligible untaught candidate)
-                    </span>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-positive shrink-0" />
+                    <span>Untaught in course syllabus</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>
-                      Demand share {(selectedSkill.latestShare * 100).toFixed(1)}% ≥ {(data.minShareForAdd * 100).toFixed(0)}% min threshold
-                    </span>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-positive shrink-0" />
+                    <span>Demand share {(selectedSkill.latestShare * 100).toFixed(1)}% ≥ {(data.minShareForAdd * 100).toFixed(0)}% threshold</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>
-                      Postings volume ({selectedSkill.postingsLatest}) ≥ {data.minPostings} min postings guard
-                    </span>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-positive shrink-0" />
+                    <span>Postings volume ({selectedSkill.postingsLatest}) ≥ {data.minPostings} min postings guard</span>
                   </li>
                 </ul>
               ) : (
                 <ul className="space-y-1.5 text-muted-foreground">
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
-                    <span>
-                      Momentum falling: trend &lt; 0 ({(selectedSkill.trend * 100).toFixed(2)} pp)
-                    </span>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-negative shrink-0" />
+                    <span>Falling momentum: trend &lt; 0 ({(selectedSkill.trend * 100).toFixed(2)} pp)</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
-                    <span>
-                      Significant contraction: decline ≥ {(data.retireMinDecline * 100).toFixed(0)}% ({(selectedSkill.relativeGrowth * 100).toFixed(1)}%)
-                    </span>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-negative shrink-0" />
+                    <span>Substantial contraction: decline ≥ {(data.retireMinDecline * 100).toFixed(0)}% ({(selectedSkill.relativeGrowth * 100).toFixed(1)}%)</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
-                    <span>
-                      Not a dominant core skill: share {(selectedSkill.latestShare * 100).toFixed(1)}% ≤ {(data.retireMaxShare * 100).toFixed(0)}%
-                    </span>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-negative shrink-0" />
+                    <span>Non-dominant: share {(selectedSkill.latestShare * 100).toFixed(1)}% ≤ {(data.retireMaxShare * 100).toFixed(0)}% ceiling</span>
                   </li>
                 </ul>
               )}
@@ -765,8 +862,14 @@ export default function CourseRecommendationsPage() {
     <Suspense
       fallback={
         <div className="p-6 space-y-6">
-          <KpiCardSkeleton />
-          <TableSkeleton rows={5} cols={5} />
+          <Skeleton className="h-8 w-64" />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+          <TableSkeleton rows={5} cols={4} />
         </div>
       }
     >
@@ -774,4 +877,3 @@ export default function CourseRecommendationsPage() {
     </Suspense>
   )
 }
-

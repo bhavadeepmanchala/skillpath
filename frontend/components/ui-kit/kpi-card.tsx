@@ -30,7 +30,7 @@ export function KpiCard({
 
   const displayValue =
     rawValue !== undefined
-      ? animatedValue.toLocaleString()
+      ? animatedValue.toLocaleString("en-IN")
       : value !== undefined
       ? value
       : "-"
@@ -54,7 +54,7 @@ export function KpiCard({
       </div>
 
       {footnote && (
-        <p className="mt-1 text-xs font-normal leading-4 text-muted-foreground line-clamp-1" title={footnote}>
+        <p className="mt-1 text-xs font-normal leading-4 text-muted-foreground" title={footnote}>
           {footnote}
         </p>
       )}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Compass, Eye, EyeOff, Loader2 } from "lucide-react"
+import { Compass, Eye, EyeOff, Loader2, ArrowRight } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 
 type Role = "student" | "policymaker"
@@ -146,22 +146,22 @@ function LoginForm() {
         <div className="text-center">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
           >
             <Compass className="h-4 w-4" />
-            SkillPath Demo
+            <span>SkillPath Demonstration</span>
           </Link>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground leading-7">
+          <h1 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-foreground mt-2">
             Sign in to SkillPath
           </h1>
         </div>
 
-        {/* Segmented Control */}
+        {/* Accessible Segmented Control */}
         <div className="mt-6">
           <div
             role="tablist"
             aria-label="User role selection"
-            className="grid grid-cols-2 rounded-lg border border-border bg-muted/30 p-1"
+            className="grid grid-cols-2 rounded-lg border border-border bg-muted/40 p-1"
           >
             <button
               ref={studentTabRef}
@@ -172,13 +172,13 @@ function LoginForm() {
               tabIndex={activeRole === "student" ? 0 : -1}
               onClick={() => handleRoleChange("student")}
               onKeyDown={(e) => handleKeyDownTab(e, "student")}
-              className={`rounded-md py-2 text-xs font-semibold transition-all duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              className={`rounded-md py-2 text-xs font-semibold transition-all duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 activeRole === "student"
-                  ? "bg-background text-foreground shadow-resting"
+                  ? "bg-background text-foreground shadow-resting font-bold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Student
+              Student / Job Seeker
             </button>
             <button
               ref={policyTabRef}
@@ -189,25 +189,30 @@ function LoginForm() {
               tabIndex={activeRole === "policymaker" ? 0 : -1}
               onClick={() => handleRoleChange("policymaker")}
               onKeyDown={(e) => handleKeyDownTab(e, "policymaker")}
-              className={`rounded-md py-2 text-xs font-semibold transition-all duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              className={`rounded-md py-2 text-xs font-semibold transition-all duration-120 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 activeRole === "policymaker"
-                  ? "bg-background text-foreground shadow-resting"
+                  ? "bg-background text-foreground shadow-resting font-bold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              Policymaker
+              Policymaker / Planner
             </button>
           </div>
 
-          <p className="mt-2.5 text-center text-xs text-muted-foreground leading-relaxed">
+          <p className="mt-3 text-center text-xs text-muted-foreground leading-relaxed">
             {activeRole === "student"
-              ? "Explore employer skill demand, calculate job readiness, and find covering courses."
-              : "Analyze macro skill trends, district hiring demand, and training supply gaps."}
+              ? "Assess your skills against employer requirements and view personalized course roadmaps."
+              : "Review district hiring signals, curriculum coverage scores, and vocational training plans."}
           </p>
         </div>
 
-        {/* Login Form */}
-        <div id="login-form-panel" role="tabpanel" aria-labelledby={`tab-${activeRole}`} className="mt-6">
+        {/* Login Form Panel */}
+        <div
+          id="login-form-panel"
+          role="tabpanel"
+          aria-labelledby={`tab-${activeRole}`}
+          className="mt-6"
+        >
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
             {/* Email Field */}
             <div className="space-y-1.5">
@@ -215,13 +220,14 @@ function LoginForm() {
                 htmlFor="login-email"
                 className="block text-xs font-medium text-foreground"
               >
-                Email
+                Email address
               </label>
               <input
                 id="login-email"
                 type="email"
                 name="email"
                 autoComplete="email"
+                placeholder="name@example.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value)
@@ -235,12 +241,14 @@ function LoginForm() {
                 }}
                 aria-invalid={!!emailError}
                 aria-describedby={emailError ? "email-error" : undefined}
-                className={`w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-resting placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                  emailError ? "border-destructive focus-visible:ring-destructive" : "border-border"
+                className={`w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-resting placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  emailError
+                    ? "border-negative focus-visible:ring-negative"
+                    : "border-border"
                 }`}
               />
               {emailError && (
-                <p id="email-error" className="text-xs text-destructive">
+                <p id="email-error" className="text-xs text-negative">
                   {emailError}
                 </p>
               )}
@@ -260,6 +268,7 @@ function LoginForm() {
                   type={showPassword ? "text" : "password"}
                   name="password"
                   autoComplete="current-password"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value)
@@ -273,15 +282,17 @@ function LoginForm() {
                   }}
                   aria-invalid={!!passwordError}
                   aria-describedby={passwordError ? "password-error" : undefined}
-                  className={`w-full rounded-md border bg-background px-3 py-2 pr-10 text-sm text-foreground shadow-resting placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                    passwordError ? "border-destructive focus-visible:ring-destructive" : "border-border"
+                  className={`w-full rounded-md border bg-background px-3 py-2 pr-10 text-sm text-foreground shadow-resting placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    passwordError
+                      ? "border-negative focus-visible:ring-negative"
+                      : "border-border"
                   }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded p-1"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded p-1"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -291,7 +302,7 @@ function LoginForm() {
                 </button>
               </div>
               {passwordError && (
-                <p id="password-error" className="text-xs text-destructive">
+                <p id="password-error" className="text-xs text-negative">
                   {passwordError}
                 </p>
               )}
@@ -301,7 +312,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-resting transition-colors duration-120 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 active:translate-y-[1px]"
+              className="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-resting transition-colors duration-120 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 active:translate-y-[1px]"
             >
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -312,23 +323,28 @@ function LoginForm() {
               )}
             </button>
 
-            {/* Demo skip button */}
+            {/* Quick Demo Bypass Button */}
             <button
               type="button"
               disabled={isSubmitting}
               onClick={handleDemoLogin}
-              className="w-full inline-flex items-center justify-center rounded-md border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-resting transition-colors duration-120 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 active:translate-y-[1px]"
+              className="w-full inline-flex items-center justify-center rounded-md border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-resting transition-colors duration-120 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 active:translate-y-[1px]"
             >
-              {activeRole === "policymaker"
-                ? "Continue as demo policymaker"
-                : "Continue as demo student"}
+              <span>
+                {activeRole === "policymaker"
+                  ? "Continue as demo policymaker"
+                  : "Continue as demo student"}
+              </span>
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </form>
 
           {/* Honest Demo Notice */}
-          <p className="mt-5 text-center text-xs text-muted-foreground leading-relaxed border-t border-border pt-4">
-            Demo environment: there are no real accounts. Any valid-looking email and password will work. Nothing is sent to a server.
-          </p>
+          <div className="mt-6 border-t border-border pt-4 text-center">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              <strong className="font-semibold text-foreground">Demo environment:</strong> No real user accounts exist. Any valid-looking email and password will work. Credentials are never sent to a server.
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -337,13 +353,13 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
+    <div data-mood="neutral" className="flex min-h-dvh flex-col bg-background text-foreground">
       <Navbar />
-      <main className="flex-1 flex items-center justify-center">
+      <main className="flex-1 flex items-center justify-center p-4">
         <Suspense
           fallback={
             <div className="mx-auto w-full max-w-md px-4 py-16 text-center text-xs text-muted-foreground">
-              Loading login portal...
+              Loading authentication portal...
             </div>
           }
         >

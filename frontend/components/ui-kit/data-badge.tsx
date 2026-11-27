@@ -1,14 +1,14 @@
 import React from "react"
-import { Database } from "lucide-react"
+import { Database, AlertTriangle } from "lucide-react"
 import { LOW_SAMPLE_THRESHOLD } from "@/lib/demand-api"
 
 export function DataBadge({ label = "Synthetic data" }: { label?: string }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/50 bg-sky-50 px-2.5 py-0.5 text-[11px] font-medium text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
+      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground"
       title="This dataset was generated deterministically for demonstration purposes."
     >
-      <Database className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <Database className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span>{label}</span>
     </span>
   )
@@ -23,10 +23,11 @@ export function LowSampleBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded border border-amber-400/50 bg-amber-50 px-1 py-0.5 text-[9px] font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-300 ${className}`}
+      className={`inline-flex items-center gap-1 rounded border border-attention/30 bg-attention-subtle px-1.5 py-0.5 text-[10px] font-semibold text-attention-foreground uppercase tracking-wider ${className}`}
       title={`Low sample size: fewer than ${threshold} postings for this skill in the latest window; district views have smaller samples (display caution only)`}
     >
-      low sample
+      <AlertTriangle className="h-2.5 w-2.5 shrink-0 text-attention" aria-hidden="true" />
+      <span>low sample</span>
     </span>
   )
 }

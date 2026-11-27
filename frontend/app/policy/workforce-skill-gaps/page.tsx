@@ -15,8 +15,9 @@ import {
   Percent,
   AlertCircle,
   TrendingDown,
+  ArrowRight,
+  Search,
 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import {
   fetchRoles,
   fetchCourses,
@@ -34,20 +35,30 @@ import {
 } from "@/lib/demand-api"
 import {
   PageHeader,
-  SectionCard,
+  FindingHeadline,
+  BigNumber,
+  FigureRow,
+  SectionHeader,
+  SourceCaption,
   FilterBar,
   SelectField,
-  KpiCard,
-  KpiCardSkeleton,
-  TableSkeleton,
+  DumbbellRow,
+  DumbbellScaleHeader,
+  TypographicRow,
+  DeltaBadge,
+  LowSampleBadge,
   Drawer,
   ErrorState,
   EmptyState,
-  LowSampleBadge,
-  DeltaBadge,
   ProgressBar,
   Skeleton,
+  TableSkeleton,
 } from "@/components/ui-kit"
+import {
+  buildCoverageFinding,
+  formatPercent,
+  formatInteger,
+} from "@/lib/findings"
 
 export default function WorkforceSkillGapsPage() {
   // ---------------------------------------------------------------------------
@@ -62,7 +73,7 @@ export default function WorkforceSkillGapsPage() {
   const [districtsLoading, setDistrictsLoading] = useState(true)
   const [selectedDistrictId, setSelectedDistrictId] = useState<string>("")
 
-  // Courses catalog (for 24 parallel alignment calls)
+  // Courses catalog (for parallel alignment calls)
   const [courses, setCourses] = useState<CourseItem[]>([])
   const [coursesLoading, setCoursesLoading] = useState(true)
   const [coursesError, setCoursesError] = useState<string | null>(null)
@@ -70,7 +81,6 @@ export default function WorkforceSkillGapsPage() {
   // ---------------------------------------------------------------------------
   // Section 1: Course Coverage State & Cache
   // ---------------------------------------------------------------------------
-  // Parallel alignment calls across all courses; a bulk endpoint would be better later.
   const [alignmentCache, setAlignmentCache] = useState<
     Record<string, CourseAlignmentResponse[]>
   >({})
@@ -78,6 +88,9 @@ export default function WorkforceSkillGapsPage() {
   const [alignmentsLoading, setAlignmentsLoading] = useState(true)
   const [alignmentsError, setAlignmentsError] = useState<string | null>(null)
   const [includeUnlinked, setIncludeUnlinked] = useState(false)
+  const [courseSearch, setCourseSearch] = useState("")
+  const [courseSortBy, setCourseSortBy] = useState<"lowest" | "highest" | "alpha">("lowest")
+  const [showAllCourses, setShowAllCourses] = useState(false)
   const activeAlignmentRequestKey = useRef<string>("")
 
   // Course Drawer state
@@ -91,6 +104,9 @@ export default function WorkforceSkillGapsPage() {
   const [flags, setFlags] = useState<FlagsResponse | null>(null)
   const [flagsLoading, setFlagsLoading] = useState(true)
   const [flagsError, setFlagsError] = useState<string | null>(null)
+  const [flagsSearch, setFlagsSearch] = useState("")
+  const [flagsSortBy, setFlagsSortBy] = useState<"attention" | "ratio" | "seats">("attention")
+  const [showAllFlags, setShowAllFlags] = useState(false)
 
   // Flag Drawer state
   const [selectedFlagDrawer, setSelectedFlagDrawer] =
@@ -178,7 +194,6 @@ export default function WorkforceSkillGapsPage() {
     const cacheKey = `${selectedRoleId}_${selectedDistrictId || "national"}`
     activeAlignmentRequestKey.current = cacheKey
 
-    // Use cached results if available
     if (alignmentCache[cacheKey]) {
       setAlignments(alignmentCache[cacheKey])
       setAlignmentsLoading(false)
@@ -195,7 +210,6 @@ export default function WorkforceSkillGapsPage() {
         ? Number(selectedDistrictId)
         : null
 
-      // Parallel alignment calls across all courses; a bulk endpoint would be better later.
       const results = await Promise.all(
         courses.map((course) =>
           fetchCourseAlignment(course.id, {
@@ -205,7 +219,6 @@ export default function WorkforceSkillGapsPage() {
         )
       )
 
-      // Guard against stale responses when filters changed mid-flight
       if (activeAlignmentRequestKey.current !== cacheKey) {
         return
       }
@@ -256,16 +269,10 @@ export default function WorkforceSkillGapsPage() {
     loadFlags()
   }, [loadFlags])
 
-  // ---------------------------------------------------------------------------
-  // Shared Opener Handlers for Drawers
-  // ---------------------------------------------------------------------------
+  // Drawers
   const openCourseDrawer = useCallback((item: CourseAlignmentResponse) => {
     setSelectedCourseDrawer(item)
     setIsCourseDrawerOpen(true)
-  }, [])
-
-  const closeCourseDrawer = useCallback(() => {
-    setIsCourseDrawerOpen(false)
   }, [])
 
   const openFlagDrawer = useCallback((item: CourseOversupplyItem) => {
@@ -273,13 +280,7 @@ export default function WorkforceSkillGapsPage() {
     setIsFlagDrawerOpen(true)
   }, [])
 
-  const closeFlagDrawer = useCallback(() => {
-    setIsFlagDrawerOpen(false)
-  }, [])
-
-  // ---------------------------------------------------------------------------
-  // Filter Options & Derived Data
-  // ---------------------------------------------------------------------------
+  // Filter labels
   const roleOptions = useMemo(() => {
     return roles.map((r) => ({
       label: `${r.name} (${r.sector})`,
@@ -312,101 +313,159 @@ export default function WorkforceSkillGapsPage() {
     return found ? `${found.name}, ${found.state}` : "Selected District"
   }, [districts, selectedDistrictId])
 
-  // Section 1: Ranked course alignments
-  // Show linked courses first, lowest coverage first. If toggle is on, include unlinked courses.
-  const rankedCourses = useMemo(() => {
-    const linked = alignments
-      .filter((a) => a.roleLinkedToCourse)
-      .sort((a, b) => a.coverageScore - b.coverageScore)
+  // Processed Courses (Section 1 - Needs-attention first: lowest coverage first)
+  const processedCourses = useMemo(() => {
+    let list = alignments.filter((a) => (includeUnlinked ? true : a.roleLinkedToCourse))
 
-    if (!includeUnlinked) {
-      return linked
+    // Search query
+    const q = courseSearch.trim().toLowerCase()
+    if (q) {
+      list = list.filter((c) => c.courseName.toLowerCase().includes(q))
     }
 
-    const unlinked = alignments
-      .filter((a) => !a.roleLinkedToCourse)
-      .sort((a, b) => a.coverageScore - b.coverageScore)
+    // Sort order
+    if (courseSortBy === "lowest") {
+      list.sort((a, b) => a.coverageScore - b.coverageScore)
+    } else if (courseSortBy === "highest") {
+      list.sort((a, b) => b.coverageScore - a.coverageScore)
+    } else if (courseSortBy === "alpha") {
+      list.sort((a, b) => a.courseName.localeCompare(b.courseName))
+    }
 
-    return [...linked, ...unlinked]
-  }, [alignments, includeUnlinked])
+    return list
+  }, [alignments, includeUnlinked, courseSearch, courseSortBy])
 
-  // Section 2: Sorted oversupply items (descending ratio, nulls last)
-  const sortedFlagItems = useMemo(() => {
+  const visibleCourses = useMemo(() => {
+    if (showAllCourses || processedCourses.length <= 10) {
+      return processedCourses
+    }
+    return processedCourses.slice(0, 10)
+  }, [processedCourses, showAllCourses])
+
+  // Processed Flags (Section 2 - Oversupplied, Obsolete, Low Sample)
+  const processedFlags = useMemo(() => {
     if (!flags?.items) return []
-    return [...flags.items].sort((a, b) => {
-      if (a.oversupplyRatio == null && b.oversupplyRatio == null) return 0
-      if (a.oversupplyRatio == null) return 1
-      if (b.oversupplyRatio == null) return -1
-      return b.oversupplyRatio - a.oversupplyRatio
-    })
-  }, [flags])
+    let list = [...flags.items]
 
-  // Section 3: max gap score for bar normalization
+    // Search query
+    const q = flagsSearch.trim().toLowerCase()
+    if (q) {
+      list = list.filter(
+        (f) =>
+          f.courseName.toLowerCase().includes(q) ||
+          f.districtName.toLowerCase().includes(q)
+      )
+    }
+
+    // Sort order: "attention" puts oversupplied and obsolete first
+    if (flagsSortBy === "attention") {
+      list.sort((a, b) => {
+        const aScore = (a.oversupplied ? 4 : 0) + (a.obsolete ? 2 : 0) + (a.lowSample ? -1 : 0)
+        const bScore = (b.oversupplied ? 4 : 0) + (b.obsolete ? 2 : 0) + (b.lowSample ? -1 : 0)
+        if (bScore !== aScore) return bScore - aScore
+        return (b.oversupplyRatio ?? 0) - (a.oversupplyRatio ?? 0)
+      })
+    } else if (flagsSortBy === "ratio") {
+      list.sort((a, b) => {
+        if (a.oversupplyRatio == null && b.oversupplyRatio == null) return 0
+        if (a.oversupplyRatio == null) return 1
+        if (b.oversupplyRatio == null) return -1
+        return b.oversupplyRatio - a.oversupplyRatio
+      })
+    } else if (flagsSortBy === "seats") {
+      list.sort((a, b) => b.seats - a.seats)
+    }
+
+    return list
+  }, [flags, flagsSearch, flagsSortBy])
+
+  const visibleFlags = useMemo(() => {
+    if (showAllFlags || processedFlags.length <= 10) {
+      return processedFlags
+    }
+    return processedFlags.slice(0, 10)
+  }, [processedFlags, showAllFlags])
+
+  // Section 3: max gap score for normalization
   const maxGapScore = useMemo(() => {
     return Math.max(...skillGaps.map((g) => g.gap_score), 0.001)
   }, [skillGaps])
 
-  // Reset filters
+  // Finding sentence calculation
+  const findingHeadline = useMemo(() => {
+    if (processedCourses.length > 0) {
+      const lowest = processedCourses[0]
+      return buildCoverageFinding({
+        courseName: lowest.courseName,
+        coverage: lowest.coverageScore,
+        roleName: selectedRoleName,
+        missingCount: lowest.missingSkills.length,
+      })
+    }
+    return "Analyzing curriculum alignment against employer skill requirements."
+  }, [processedCourses, selectedRoleName])
+
+  // Attention summary numbers
+  const oversuppliedCount = useMemo(() => {
+    return flags?.items.filter((i) => i.oversupplied).length ?? 0
+  }, [flags])
+
+  const obsoleteCount = useMemo(() => {
+    return flags?.items.filter((i) => Boolean(i.obsolete)).length ?? 0
+  }, [flags])
+
+  const lowestCoverage = useMemo(() => {
+    if (processedCourses.length === 0) return null
+    return processedCourses[0].coverageScore
+  }, [processedCourses])
+
   const handleResetFilters = useCallback(() => {
     setSelectedDistrictId("")
     if (roles.length > 0) {
       setSelectedRoleId(String(roles[0].id))
     }
+    setCourseSearch("")
+    setFlagsSearch("")
+    setCourseSortBy("lowest")
+    setFlagsSortBy("attention")
+    setIncludeUnlinked(false)
   }, [roles])
 
   const isFiltered = useMemo(() => {
     const defaultRoleId = roles.length > 0 ? String(roles[0].id) : ""
-    return selectedDistrictId !== "" || (!!defaultRoleId && selectedRoleId !== defaultRoleId)
-  }, [roles, selectedDistrictId, selectedRoleId])
+    return (
+      selectedDistrictId !== "" ||
+      (!!defaultRoleId && selectedRoleId !== defaultRoleId) ||
+      Boolean(courseSearch || flagsSearch || includeUnlinked)
+    )
+  }, [roles, selectedDistrictId, selectedRoleId, courseSearch, flagsSearch, includeUnlinked])
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   return (
-    <div className="space-y-6 animate-page-enter">
-      {/* Page Header */}
+    <div className="space-y-8 animate-page-enter">
+      {/* 1. Page Header with standfirst */}
       <PageHeader
         title="Skill Gap Explorer"
-        description="Analyze curriculum coverage across target roles, identify oversupplied course programs, and explore nationwide workforce skill shortages."
-        showSyntheticBadge={true}
+        standfirst="Detect curriculum coverage deficits, oversupplied seat quotas, and nationwide workforce shortages."
+        showSyntheticBadge
         breadcrumbs={[
           { label: "Policymaker", href: "/policy" },
           { label: "Skill Gap Explorer" },
         ]}
       />
 
-      {/* Honesty Notice Banner */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-sky-300/60 bg-sky-50/70 p-3 text-xs text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200 shadow-resting">
-        <div className="flex items-center gap-1.5 font-medium">
-          <Info className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
-          <span>Coverage ignores the taught level of a skill</span>
-        </div>
-        <span className="text-sky-400 dark:text-sky-700 hidden sm:inline">•</span>
-        <div className="text-muted-foreground dark:text-sky-300/80">
-          All data is synthetic and deterministic.
-        </div>
-      </div>
-
-      {/* Filter Bar: Role & District */}
+      {/* 2. Filter Bar: Role, District & Reset */}
       <FilterBar onReset={handleResetFilters} isFiltered={isFiltered}>
         {rolesLoading ? (
-          <div className="flex items-center gap-2 py-1.5">
-            <Skeleton className="h-4 w-28" />
-          </div>
+          <Skeleton className="h-7 w-32" />
         ) : rolesError ? (
           <div className="flex items-center gap-2 text-xs text-destructive">
             <span>{rolesError}</span>
-            <button
-              onClick={loadRoles}
-              className="underline font-medium hover:opacity-80"
-            >
-              Retry
-            </button>
+            <button onClick={loadRoles} className="underline font-medium">Retry</button>
           </div>
         ) : (
           <SelectField
             id="role-filter"
-            label="Role"
+            label="Target role"
             value={selectedRoleId}
             onChange={(val) => setSelectedRoleId(val)}
             options={roleOptions}
@@ -415,7 +474,7 @@ export default function WorkforceSkillGapsPage() {
 
         <SelectField
           id="district-filter"
-          label="District"
+          label="Geographic scope"
           value={selectedDistrictId}
           disabled={districtsLoading}
           onChange={(val) => setSelectedDistrictId(val)}
@@ -423,548 +482,440 @@ export default function WorkforceSkillGapsPage() {
         />
       </FilterBar>
 
-      {/* ===================================================================== */}
-      {/* SECTION 1: Course coverage for this role                             */}
-      {/* ===================================================================== */}
-      <SectionCard
-        title="Course coverage for this role"
-        subtitle={`Ranked curriculum alignment for ${selectedRoleName} in ${selectedDistrictName}`}
-        actionSlot={
-          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground select-none">
-            <input
-              type="checkbox"
-              checked={includeUnlinked}
-              onChange={(e) => setIncludeUnlinked(e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
+      {/* 3. Finding Headline & Open FigureRow */}
+      <section className="space-y-6">
+        {alignmentsLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-4 w-1/3" />
+          </div>
+        ) : (
+          <FindingHeadline
+            kicker="Curriculum Alignment Finding"
+            sentence={findingHeadline}
+          >
+            <SourceCaption
+              scope={`${selectedRoleName} · ${selectedDistrictName}`}
+              window={flags ? `${flags.windowStart} – ${flags.windowEnd}` : "Trailing evaluation window"}
+              note="Coverage reflects presence in curriculum vs top demanded skills"
             />
-            <span>Include courses not linked to this role</span>
-          </label>
-        }
-      >
+          </FindingHeadline>
+        )}
+
+        {alignmentsLoading || flagsLoading ? (
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 border-y border-border py-5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <FigureRow columns={4}>
+            <BigNumber
+              label="Lowest Course Coverage"
+              value={lowestCoverage != null ? `${lowestCoverage.toFixed(1)}%` : "—"}
+              footnote={
+                processedCourses[0]
+                  ? `${processedCourses[0].courseName} (Needs attention)`
+                  : "No course data"
+              }
+            />
+            <BigNumber
+              label="Flagged Oversupplied"
+              rawValue={oversuppliedCount}
+              footnote="Seats exceed local openings"
+            />
+            <BigNumber
+              label="Flagged Obsolete"
+              rawValue={obsoleteCount}
+              footnote="Low coverage & declining skills"
+            />
+            <BigNumber
+              label="Top National Gap"
+              size="text"
+              value={skillGaps[0] ? skillGaps[0].name : "—"}
+              footnote={
+                skillGaps[0]
+                  ? `${Math.round(skillGaps[0].demand_share * 100)}% demand vs ${Math.round(skillGaps[0].course_coverage * 100)}% taught`
+                  : "Largest national disparity"
+              }
+            />
+          </FigureRow>
+        )}
+      </section>
+
+      {/* ===================================================================== */}
+      {/* SECTION 1: Needs-Attention Courses (Dumbbell: Taught vs 100% Demand) */}
+      {/* ===================================================================== */}
+      <section className="space-y-4">
+        <SectionHeader
+          title="Course Coverage & Alignment (Needs Attention First)"
+          subtitle={`Taught coverage share vs 100% of demanded skills for ${selectedRoleName} in ${selectedDistrictName} (lowest coverage courses first).`}
+          actions={
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative w-full sm:w-48">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                <input
+                  type="text"
+                  placeholder="Search course..."
+                  value={courseSearch}
+                  onChange={(e) => setCourseSearch(e.target.value)}
+                  aria-label="Search course"
+                  className="w-full pl-8 pr-2.5 py-1.5 rounded-md border border-border bg-card text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+              <SelectField
+                id="course-sort"
+                label="Sort"
+                value={courseSortBy}
+                onChange={(val) => setCourseSortBy(val as "lowest" | "highest" | "alpha")}
+                options={[
+                  { label: "Lowest coverage first (priority)", value: "lowest" },
+                  { label: "Highest coverage first", value: "highest" },
+                  { label: "Course name (A–Z)", value: "alpha" },
+                ]}
+              />
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground select-none">
+                <input
+                  type="checkbox"
+                  checked={includeUnlinked}
+                  onChange={(e) => setIncludeUnlinked(e.target.checked)}
+                  className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
+                />
+                <span>Include unlinked</span>
+              </label>
+            </div>
+          }
+        />
+
         {alignmentsLoading || coursesLoading ? (
-          <TableSkeleton rows={6} cols={5} />
+          <TableSkeleton rows={8} cols={4} />
         ) : alignmentsError || coursesError ? (
           <ErrorState
             message={alignmentsError || coursesError || "Failed to load course coverage."}
             onRetry={loadAlignments}
           />
-        ) : rankedCourses.length === 0 ? (
+        ) : processedCourses.length === 0 ? (
           <EmptyState
             title="No courses found"
             description={
               includeUnlinked
                 ? "No course alignment data is available."
-                : "No courses are linked to this role. Check 'Include courses not linked to this role' above to view unlinked courses."
+                : "No courses are linked to this role. Check 'Include unlinked' to explore the full catalog."
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[650px] text-left text-xs">
-              <thead className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase text-[11px] tracking-wide">
-                <tr>
-                  <th className="py-3 px-4 font-medium">Rank & Course</th>
-                  <th className="py-3 px-3 font-medium">Role Link</th>
-                  <th className="py-3 px-4 font-medium min-w-[200px]">
-                    Coverage Score (Lowest First)
-                  </th>
-                  <th className="py-3 px-3 text-right font-medium">Covered</th>
-                  <th className="py-3 px-3 text-right font-medium">Missing</th>
-                  <th className="py-3 px-3 text-right font-medium">Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {rankedCourses.map((item, idx) => {
-                  const isUnlinked = !item.roleLinkedToCourse
-                  const scorePct = Number(item.coverageScore.toFixed(1))
-                  const barColor =
-                    scorePct < 25
-                      ? "bg-rose-500"
-                      : scorePct < 60
-                      ? "bg-amber-500"
-                      : "bg-emerald-600"
+          <div>
+            <DumbbellScaleHeader
+              leftLabel="Course & Role Link"
+              maxScale={100}
+              unit="%"
+              rightLabel="Covered → 100% Demand"
+            />
+            <div className="divide-y divide-border/70 border-b border-border/70">
+              {visibleCourses.map((item, idx) => {
+                const scorePct = Number(item.coverageScore.toFixed(1))
+                const isNeedsAttention = scorePct < 40.0
 
-                  return (
-                    <tr
-                      key={item.courseId}
-                      onClick={() => openCourseDrawer(item)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault()
-                          openCourseDrawer(item)
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      className={`cursor-pointer transition-colors duration-120 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                        isUnlinked ? "opacity-60 bg-muted/10" : ""
-                      }`}
-                    >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-semibold text-muted-foreground">
-                            {idx + 1}
-                          </span>
-                          <span className="font-semibold text-foreground">
-                            {item.courseName}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        {item.roleLinkedToCourse ? (
-                          <span className="inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300">
-                            Linked
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-md border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                            Unlinked
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <ProgressBar
-                            value={scorePct}
-                            className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
-                            barClassName={`h-full rounded-full ${barColor}`}
-                            label={`${item.courseName} coverage score`}
-                          />
-                          <span className="w-12 text-right font-mono text-xs font-semibold tabular-nums text-foreground">
-                            {scorePct}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono tabular-nums text-emerald-700 dark:text-emerald-400 font-medium">
-                        {item.coveredSkills.length}
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono tabular-nums text-amber-700 dark:text-amber-400 font-medium">
-                        {item.missingSkills.length}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <span className="inline-flex items-center text-muted-foreground hover:text-foreground">
-                          <ChevronRight className="h-4 w-4" />
+                return (
+                  <DumbbellRow
+                    key={item.courseId}
+                    rank={idx + 1}
+                    label={item.courseName}
+                    sublabel={`${item.roleLinkedToCourse ? "Linked" : "Unlinked"} · ${item.coveredSkills.length} covered, ${item.missingSkills.length} missing`}
+                    previousValue={scorePct}
+                    latestValue={100}
+                    maxScale={100}
+                    previousText={`${scorePct}% taught`}
+                    latestText="100%"
+                    tone={isNeedsAttention ? "negative" : "positive"}
+                    staggerIndex={idx}
+                    onClick={() => openCourseDrawer(item)}
+                    className={!item.roleLinkedToCourse ? "opacity-75" : ""}
+                    badge={
+                      isNeedsAttention ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-attention-foreground bg-attention-subtle px-1.5 py-0.5 rounded border border-attention/30">
+                          <AlertTriangle className="h-3 w-3 text-attention" aria-hidden="true" />
+                          <span>Critical gap</span>
                         </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                      ) : undefined
+                    }
+                  />
+                )
+              })}
+            </div>
+
+            {processedCourses.length > 10 && (
+              <div className="pt-3 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  Showing {visibleCourses.length} of {processedCourses.length} courses
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAllCourses((prev) => !prev)}
+                  className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-2 py-1"
+                >
+                  {showAllCourses ? "Show top 10 only" : `Show all ${processedCourses.length} courses`}
+                </button>
+              </div>
+            )}
           </div>
         )}
-      </SectionCard>
+      </section>
 
       {/* ===================================================================== */}
-      {/* SECTION 2: Oversupply flags                                          */}
+      {/* SECTION 2: Oversupply & Obsolescence Flags (Typographic rows)         */}
       {/* ===================================================================== */}
-      <SectionCard
-        title="Oversupply flags"
-        subtitle="Comparing training seat capacity to trailing 12-month employer job postings"
-      >
-        {flagsLoading ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCardSkeleton />
-              <KpiCardSkeleton />
-              <KpiCardSkeleton />
-              <KpiCardSkeleton />
+      <section className="space-y-4">
+        <SectionHeader
+          title="Course Oversupply & Obsolescence Flags"
+          subtitle={`Comparing training seats to local employer openings (${flags?.items?.length ?? 0} offerings evaluated).`}
+          actions={
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative w-full sm:w-52">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                <input
+                  type="text"
+                  placeholder="Search course or district..."
+                  value={flagsSearch}
+                  onChange={(e) => setFlagsSearch(e.target.value)}
+                  aria-label="Search course or district"
+                  className="w-full pl-8 pr-2.5 py-1.5 rounded-md border border-border bg-card text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+              <SelectField
+                id="flags-sort"
+                label="Sort"
+                value={flagsSortBy}
+                onChange={(val) => setFlagsSortBy(val as "attention" | "ratio" | "seats")}
+                options={[
+                  { label: "Needs attention first (flags)", value: "attention" },
+                  { label: "Oversupply ratio (high to low)", value: "ratio" },
+                  { label: "Total seat capacity", value: "seats" },
+                ]}
+              />
             </div>
-            <TableSkeleton rows={5} cols={9} />
-          </div>
+          }
+        />
+
+        {flagsLoading ? (
+          <TableSkeleton rows={8} cols={4} />
         ) : flagsError ? (
           <ErrorState message={flagsError} onRetry={loadFlags} />
-        ) : !flags || sortedFlagItems.length === 0 ? (
+        ) : processedFlags.length === 0 ? (
           <EmptyState
             title="No oversupply flags found"
-            description="No course offerings were found for the selected district scope."
+            description="No offerings matched the selected scope or search query."
           />
         ) : (
-          <div className="space-y-4">
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard
-                label="Pairs evaluated"
-                rawValue={sortedFlagItems.length}
-                icon={BookOpen}
-                footnote="Course-district offerings in scope"
-              />
-              <KpiCard
-                label="Flagged oversupplied"
-                rawValue={sortedFlagItems.filter((i) => i.oversupplied).length}
-                icon={ShieldAlert}
-                footnote={`Ratio > ${flags.oversupplyThreshold}x with ≥${flags.minOpenings} openings`}
-                className="border-rose-200/80 bg-rose-50/20 dark:border-rose-950 dark:bg-rose-950/10"
-              />
-              <KpiCard
-                label="Flagged obsolete"
-                rawValue={sortedFlagItems.filter((i) => i.obsolete).length}
-                icon={AlertCircle}
-                footnote={
-                  flags.obsoleteCoverageThreshold != null
-                    ? `Coverage < ${flags.obsoleteCoverageThreshold}% and negative key trend`
-                    : "Coverage below threshold and negative key trend"
-                }
-                className="border-amber-200/80 bg-amber-50/20 dark:border-amber-950 dark:bg-amber-950/10"
-              />
-              <KpiCard
-                label="Low sample"
-                rawValue={sortedFlagItems.filter((i) => i.lowSample).length}
-                icon={AlertTriangle}
-                footnote={`Fewer than ${flags.minOpenings} estimated openings`}
-              />
+          <div>
+            <div className="divide-y divide-border/70 border-y border-border/70">
+              {visibleFlags.map((item, idx) => {
+                const ratio = item.oversupplyRatio
+                const isMuted = item.lowSample
+
+                return (
+                  <TypographicRow
+                    key={`${item.courseId}_${item.districtId}`}
+                    title={item.courseName}
+                    subtitle={`${item.districtName} · ${item.seats.toLocaleString("en-IN")} seats vs ${
+                      item.estimatedOpenings != null ? `${item.estimatedOpenings.toFixed(1)} openings` : "—"
+                    }`}
+                    staggerIndex={idx}
+                    className={isMuted ? "opacity-65" : ""}
+                    primaryFigure={ratio != null ? `${ratio.toFixed(1)}x` : "—"}
+                    secondaryFigure="ratio"
+                    onClick={() => openFlagDrawer(item)}
+                    badges={
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {item.obsolete && (
+                          <span className="inline-flex items-center gap-1 rounded border border-attention/40 bg-attention-subtle px-2 py-0.5 text-[10px] font-semibold text-attention-foreground uppercase tracking-wide">
+                            <TrendingDown className="h-3 w-3 text-attention" aria-hidden="true" />
+                            <span>Obsolete</span>
+                          </span>
+                        )}
+                        {item.lowSample ? (
+                          <LowSampleBadge threshold={flags?.minOpenings} />
+                        ) : item.oversupplied ? (
+                          <span className="inline-flex items-center gap-1 rounded border border-negative/40 bg-negative-subtle px-2 py-0.5 text-[10px] font-semibold text-negative-foreground uppercase tracking-wide">
+                            <AlertTriangle className="h-3 w-3 text-negative" aria-hidden="true" />
+                            <span>Oversupplied</span>
+                          </span>
+                        ) : !item.obsolete ? (
+                          <span className="inline-flex items-center gap-1 rounded border border-positive/40 bg-positive-subtle px-2 py-0.5 text-[10px] font-medium text-positive-foreground">
+                            <CheckCircle2 className="h-3 w-3 text-positive" aria-hidden="true" />
+                            <span>Balanced</span>
+                          </span>
+                        ) : null}
+                        <Link
+                          href={`/policy/course-recommendations?course=${item.courseId}&district=${item.districtId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline px-1.5 py-0.5 rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        >
+                          <span>Recommendations</span>
+                          <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                        </Link>
+                      </div>
+                    }
+                  />
+                )
+              })}
             </div>
 
-            {/* Response Parameters Caption */}
-            <div className="rounded-md border border-border/60 bg-muted/20 px-3.5 py-2 text-[11px] text-muted-foreground">
-              <span className="font-semibold text-foreground">Window:</span>{" "}
-              {flags.windowStart} to {flags.windowEnd} ({flags.windowMonths} months)
-              <span className="mx-2 text-border">•</span>
-              <span className="font-semibold text-foreground">Scaling factor:</span>{" "}
-              {flags.scalingFactor} (assumes 1 job posting = 1 opening)
-              <span className="mx-2 text-border">•</span>
-              <span className="font-semibold text-foreground">Ratio threshold:</span>{" "}
-              {flags.oversupplyThreshold}x
-              <span className="mx-2 text-border">•</span>
-              <span className="font-semibold text-foreground">Min openings:</span>{" "}
-              {flags.minOpenings}
-              {flags.obsoleteCoverageThreshold != null && (
-                <>
-                  <span className="mx-2 text-border">•</span>
-                  <span className="font-semibold text-foreground">Obsolete coverage threshold:</span>{" "}
-                  {flags.obsoleteCoverageThreshold}%
-                </>
-              )}
-            </div>
+            {processedFlags.length > 10 && (
+              <div className="pt-3 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  Showing {visibleFlags.length} of {processedFlags.length} flagged offerings
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAllFlags((prev) => !prev)}
+                  className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-2 py-1"
+                >
+                  {showAllFlags ? "Show top 10 only" : `Show all ${processedFlags.length} offerings`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
-            {/* Oversupply Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-left text-xs">
-                <thead className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase text-[11px] tracking-wide">
-                  <tr>
-                    <th className="py-3 px-4 font-medium">Course</th>
-                    <th className="py-3 px-3 font-medium">District</th>
-                    <th className="py-3 px-3 text-right font-medium">Seats</th>
-                    <th className="py-3 px-3 text-right font-medium">Est. Openings</th>
-                    <th className="py-3 px-3 text-right font-medium">Ratio</th>
-                    <th className="py-3 px-3 text-right font-medium">Coverage</th>
-                    <th className="py-3 px-3 text-center font-medium">Key Skill Trend</th>
-                    <th className="py-3 px-3 text-right font-medium">Key Skills</th>
-                    <th className="py-3 px-4 text-center font-medium">Status</th>
-                    <th className="py-3 px-3 text-center font-medium">Recommendations</th>
-                    <th className="py-3 px-3 text-right font-medium">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
-                  {sortedFlagItems.map((item) => {
-                    const isMuted = item.lowSample
+      {/* ===================================================================== */}
+      {/* SECTION 3: National Skill Gaps Top 10 (Dumbbell: Taught vs Demand)    */}
+      {/* ===================================================================== */}
+      <section className="space-y-4">
+        <SectionHeader
+          title="National Skill Gaps (Top 10 Shortages)"
+          subtitle="Dumbbell compares national course coverage (%) against employer demand share (%) across all 24 courses."
+        />
 
-                    return (
-                      <tr
-                        key={`${item.courseId}_${item.districtId}`}
-                        onClick={() => openFlagDrawer(item)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            const target = e.target as HTMLElement
-                            if (target.tagName.toLowerCase() === "a" || target.closest("a")) {
-                              return
-                            }
-                            e.preventDefault()
-                            openFlagDrawer(item)
-                          }
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        className={`cursor-pointer transition-colors duration-120 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                          isMuted ? "opacity-60 text-muted-foreground" : ""
-                        }`}
-                      >
-                        <td className="py-3 px-4 font-semibold text-foreground">
-                          {item.courseName}
-                        </td>
-                        <td className="py-3 px-3 text-muted-foreground">
-                          {item.districtName}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono tabular-nums text-foreground">
-                          {item.seats.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono tabular-nums text-foreground">
-                          {item.estimatedOpenings != null
-                            ? item.estimatedOpenings.toFixed(1)
-                            : "—"}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono font-semibold tabular-nums text-foreground">
-                          {item.oversupplyRatio != null
-                            ? `${item.oversupplyRatio.toFixed(2)}x`
-                            : "—"}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono tabular-nums text-foreground">
-                          {item.coverage != null ? `${item.coverage.toFixed(1)}%` : "—"}
-                        </td>
-                        <td className="py-3 px-3 text-center">
-                          <DeltaBadge value={item.keySkillTrend ?? 0} size="sm" />
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono tabular-nums text-muted-foreground">
-                          <span title={`${item.fallingSkillCount ?? 0} falling out of ${item.keySkillCount ?? 0} key skills`}>
-                            {item.keySkillCount ?? 0}
-                            {item.fallingSkillCount != null && item.fallingSkillCount > 0 ? (
-                              <span className="text-rose-600 dark:text-rose-400 font-semibold ml-1">
-                                ({item.fallingSkillCount}↓)
-                              </span>
-                            ) : null}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                            {item.obsolete && (
-                              <Badge
-                                variant="destructive"
-                                className="border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                              >
-                                Obsolete
-                              </Badge>
-                            )}
-                            {item.lowSample ? (
-                              <LowSampleBadge threshold={flags.minOpenings} />
-                            ) : item.oversupplied ? (
-                              <Badge
-                                variant="destructive"
-                                className="border border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300"
-                              >
-                                Oversupplied
-                              </Badge>
-                            ) : !item.obsolete ? (
-                              <Badge
-                                variant="outline"
-                                className="border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                              >
-                                OK
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <Link
-                            href={`/policy/course-recommendations?course=${item.courseId}&district=${item.districtId}`}
-                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1.5 py-0.5"
-                          >
-                            <span>View recommendations</span>
-                          </Link>
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <span className="inline-flex items-center text-muted-foreground hover:text-foreground">
-                            <ChevronRight className="h-4 w-4" />
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+        {skillGapsLoading ? (
+          <TableSkeleton rows={5} cols={4} />
+        ) : skillGapsError ? (
+          <ErrorState message={skillGapsError} onRetry={loadSkillGaps} />
+        ) : skillGaps.length === 0 ? (
+          <EmptyState title="No skill gaps" description="No national gaps returned." />
+        ) : (
+          <div>
+            <DumbbellScaleHeader
+              leftLabel="Skill"
+              maxScale={100}
+              unit="%"
+              rightLabel="Taught → Demand Share"
+            />
+            <div className="divide-y divide-border/70 border-b border-border/70">
+              {skillGaps.map((item, index) => {
+                const demandPct = Math.round(item.demand_share * 100)
+                const coveragePct = Math.round(item.course_coverage * 100)
+                const growthPct = Math.round((item.growth_factor - 1) * 100)
+
+                return (
+                  <DumbbellRow
+                    key={item.name}
+                    rank={index + 1}
+                    label={item.name}
+                    sublabel={`Growth factor: ${growthPct >= 0 ? `+${growthPct}%` : `${growthPct}%`}`}
+                    previousValue={coveragePct}
+                    latestValue={demandPct}
+                    maxScale={100}
+                    previousText={`${coveragePct}% taught`}
+                    latestText={`${demandPct}% demand`}
+                    tone={demandPct > coveragePct ? "negative" : "positive"}
+                    staggerIndex={index}
+                    badge={
+                      <span className="font-mono text-[11px] font-semibold text-foreground bg-muted px-2 py-0.5 rounded">
+                        gap {item.gap_score.toFixed(2)}
+                      </span>
+                    }
+                  />
+                )
+              })}
             </div>
           </div>
         )}
-      </SectionCard>
+      </section>
 
       {/* ===================================================================== */}
-      {/* SECTION 3: National skill gaps                                       */}
-      {/* ===================================================================== */}
-      <SectionCard
-        title="National skill gaps"
-        subtitle="Ranked disparity between employer hiring demand and course curriculum coverage across India"
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-muted-foreground italic">
-            Coverage here is a skill-level number across all courses nationally, not a per-course score.
-          </p>
-
-          {skillGapsLoading ? (
-            <TableSkeleton rows={5} cols={5} />
-          ) : skillGapsError ? (
-            <ErrorState message={skillGapsError} onRetry={loadSkillGaps} />
-          ) : skillGaps.length === 0 ? (
-            <EmptyState
-              title="No skill gaps found"
-              description="No national skill gap data returned from backend."
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px] text-left text-xs">
-                <thead className="border-b border-border/60 bg-muted/30 text-muted-foreground uppercase text-[11px] tracking-wide">
-                  <tr>
-                    <th className="py-3 px-4 font-medium">Rank & Skill</th>
-                    <th className="py-3 px-3 font-medium">Demand Share</th>
-                    <th className="py-3 px-3 font-medium">Course Coverage</th>
-                    <th className="py-3 px-3 font-medium">Growth</th>
-                    <th className="py-3 px-4 font-medium min-w-[180px]">Gap Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
-                  {skillGaps.map((item, index) => {
-                    const demandPct = Math.round(item.demand_share * 100)
-                    const coveragePct = Math.round(item.course_coverage * 100)
-                    const growthPct = Math.round((item.growth_factor - 1) * 100)
-                    const growthFormatted = `${growthPct >= 0 ? "+" : ""}${growthPct}%`
-                    const barWidthPct = Math.min(
-                      100,
-                      Math.max(4, Math.round((item.gap_score / maxGapScore) * 100))
-                    )
-
-                    return (
-                      <tr key={item.name} className="transition-colors hover:bg-muted/30">
-                        <td className="py-3 px-4 font-semibold text-foreground">
-                          <div className="flex items-center gap-2.5">
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-semibold text-muted-foreground">
-                              {index + 1}
-                            </span>
-                            <span>{item.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-muted-foreground">
-                          appears in{" "}
-                          <span className="font-semibold text-foreground">
-                            {demandPct}%
-                          </span>{" "}
-                          of postings
-                        </td>
-                        <td className="py-3 px-3 text-muted-foreground">
-                          <span className="font-semibold text-foreground">
-                            {coveragePct}%
-                          </span>{" "}
-                          of courses teach it
-                        </td>
-                        <td className="py-3 px-3">
-                          <Badge
-                            variant="outline"
-                            className="border-emerald-200 bg-emerald-50 text-emerald-700 font-medium dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                          >
-                            {growthFormatted}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-3">
-                            <ProgressBar
-                              value={barWidthPct}
-                              className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
-                              barClassName="h-full rounded-full bg-primary"
-                              label={`${item.name} gap score`}
-                            />
-                            <span className="w-10 text-right font-mono text-xs font-semibold tabular-nums text-foreground">
-                              {item.gap_score.toFixed(2)}
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </SectionCard>
-
-      {/* ===================================================================== */}
-      {/* DRAWER 1: Course Alignment Breakdown                                 */}
+      {/* DRAWER 1: Course Alignment Detail                                     */}
       {/* ===================================================================== */}
       <Drawer
         isOpen={isCourseDrawerOpen}
-        onClose={closeCourseDrawer}
+        onClose={() => setIsCourseDrawerOpen(false)}
         title={selectedCourseDrawer?.courseName || "Course Alignment"}
-        subtitle={`Role: ${selectedCourseDrawer?.roleName || selectedRoleName} • ${
+        subtitle={`Role: ${selectedCourseDrawer?.roleName || selectedRoleName} · ${
           selectedCourseDrawer?.districtId ? selectedDistrictName : "National"
         }`}
         width="w-[min(520px,100vw)]"
       >
         {selectedCourseDrawer && (
           <div className="space-y-5">
-            {/* Check for 0 postings in scope */}
             {selectedCourseDrawer.postingsInScope === 0 ? (
               <EmptyState
                 title="No postings in scope"
-                description={`No job postings were found for ${selectedCourseDrawer.roleName} in this district/national scope over the ${selectedCourseDrawer.windowMonths}-month evaluation window. Alignment requires active postings to measure skill demand.`}
+                description={`No job postings were found for ${selectedCourseDrawer.roleName} in this scope over the ${selectedCourseDrawer.windowMonths}-month evaluation window.`}
               />
             ) : (
               <>
-                {/* Metrics Summary Grid */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="rounded-lg border border-border/80 bg-muted/20 p-3">
-                    <div className="text-[11px] font-medium text-muted-foreground">
+                <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg border border-border bg-card">
+                  <div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Coverage Score
-                    </div>
-                    <div className="mt-1 text-2xl font-bold font-mono tabular-nums text-foreground">
+                    </span>
+                    <div className="font-serif text-2xl font-bold font-mono tabular-nums text-foreground mt-0.5">
                       {selectedCourseDrawer.coverageScore.toFixed(1)}%
                     </div>
-                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            Math.max(2, selectedCourseDrawer.coverageScore)
-                          )}%`,
-                        }}
-                      />
-                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Against top {selectedCourseDrawer.topN} demanded skills
+                    </span>
                   </div>
 
-                  <div className="rounded-lg border border-border/80 bg-muted/20 p-3">
-                    <div className="text-[11px] font-medium text-muted-foreground">
+                  <div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Postings in Scope
+                    </span>
+                    <div className="font-serif text-2xl font-bold font-mono tabular-nums text-foreground mt-0.5">
+                      {formatInteger(selectedCourseDrawer.postingsInScope)}
                     </div>
-                    <div className="mt-1 text-2xl font-bold font-mono tabular-nums text-foreground">
-                      {selectedCourseDrawer.postingsInScope.toLocaleString()}
-                    </div>
-                    <div className="mt-1 text-[11px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       Over {selectedCourseDrawer.windowMonths} months window
-                    </div>
+                    </span>
                   </div>
                 </div>
 
-                {/* Honesty note */}
-                <div className="rounded-md border border-sky-200/60 bg-sky-50/50 p-2.5 text-[11px] text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300 flex items-center gap-2">
-                  <Info className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
-                  <span>
-                    Coverage score reflects presence in curriculum vs top {selectedCourseDrawer.topN} demanded skills. Coverage ignores the taught level of a skill.
-                  </span>
+                <div className="p-3 rounded-lg border border-border/80 bg-muted/20 text-xs text-muted-foreground leading-relaxed">
+                  Coverage score reflects presence in curriculum vs top {selectedCourseDrawer.topN} demanded skills. Coverage ignores the taught level of a skill.
                 </div>
 
                 {/* Covered Skills */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>
-                        Covered Skills ({selectedCourseDrawer.coveredSkills.length})
-                      </span>
+                      <CheckCircle2 className="h-3.5 w-3.5 text-positive" aria-hidden="true" />
+                      <span>Covered Skills ({selectedCourseDrawer.coveredSkills.length})</span>
                     </h4>
-                    <span className="text-[11px] text-muted-foreground">
-                      Demand share
-                    </span>
+                    <span className="text-[11px] text-muted-foreground">Demand share</span>
                   </div>
 
                   {selectedCourseDrawer.coveredSkills.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic p-2 border border-dashed rounded">
-                      None of the top demanded skills are covered by this course.
+                      None of the top demanded skills are taught by this course.
                     </p>
                   ) : (
-                    <div className="space-y-1.5 border border-border/60 rounded-md p-2 bg-card max-h-56 overflow-y-auto">
-                      {selectedCourseDrawer.coveredSkills.map((s) => {
-                        const sharePct = (s.demandShare * 100).toFixed(1)
-                        return (
-                          <div
-                            key={s.skillId}
-                            className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-muted/40"
-                          >
-                            <span className="font-medium text-foreground truncate pr-2">
-                              {s.name}
-                            </span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="font-mono text-[11px] tabular-nums font-semibold text-emerald-700 dark:text-emerald-400">
-                                {sharePct}%
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })}
+                    <div className="space-y-1.5 border border-border rounded-md p-2 bg-card max-h-52 overflow-y-auto">
+                      {selectedCourseDrawer.coveredSkills.map((s) => (
+                        <div
+                          key={s.skillId}
+                          className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-muted/40"
+                        >
+                          <span className="font-medium text-foreground">{s.name}</span>
+                          <span className="font-mono text-[11px] tabular-nums font-semibold text-positive-foreground">
+                            {formatPercent(s.demandShare)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -973,40 +924,29 @@ export default function WorkforceSkillGapsPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                      <XCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                      <span>
-                        Missing Skills ({selectedCourseDrawer.missingSkills.length})
-                      </span>
+                      <XCircle className="h-3.5 w-3.5 text-attention" aria-hidden="true" />
+                      <span>Missing Skills ({selectedCourseDrawer.missingSkills.length})</span>
                     </h4>
-                    <span className="text-[11px] text-muted-foreground">
-                      Demand share
-                    </span>
+                    <span className="text-[11px] text-muted-foreground">Demand share</span>
                   </div>
 
                   {selectedCourseDrawer.missingSkills.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic p-2 border border-dashed rounded">
-                      All top demanded skills for this role are covered.
+                      All top demanded skills for this role are covered!
                     </p>
                   ) : (
-                    <div className="space-y-1.5 border border-border/60 rounded-md p-2 bg-card max-h-56 overflow-y-auto">
-                      {selectedCourseDrawer.missingSkills.map((s) => {
-                        const sharePct = (s.demandShare * 100).toFixed(1)
-                        return (
-                          <div
-                            key={s.skillId}
-                            className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-muted/40"
-                          >
-                            <span className="text-muted-foreground truncate pr-2">
-                              {s.name}
-                            </span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="font-mono text-[11px] tabular-nums font-semibold text-amber-700 dark:text-amber-400">
-                                {sharePct}%
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })}
+                    <div className="space-y-1.5 border border-border rounded-md p-2 bg-card max-h-52 overflow-y-auto">
+                      {selectedCourseDrawer.missingSkills.map((s) => (
+                        <div
+                          key={s.skillId}
+                          className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-muted/40"
+                        >
+                          <span className="text-muted-foreground">{s.name}</span>
+                          <span className="font-mono text-[11px] tabular-nums font-semibold text-attention-foreground">
+                            {formatPercent(s.demandShare)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1017,43 +957,41 @@ export default function WorkforceSkillGapsPage() {
       </Drawer>
 
       {/* ===================================================================== */}
-      {/* DRAWER 2: Oversupply Flag Breakdown                                  */}
+      {/* DRAWER 2: Oversupply & Obsolescence Flag Breakdown                    */}
       {/* ===================================================================== */}
       <Drawer
         isOpen={isFlagDrawerOpen}
-        onClose={closeFlagDrawer}
+        onClose={() => setIsFlagDrawerOpen(false)}
         title={selectedFlagDrawer?.courseName || "Oversupply Breakdown"}
         subtitle={`District: ${selectedFlagDrawer?.districtName || "District"}`}
-        width="w-[min(480px,100vw)]"
+        width="w-[min(500px,100vw)]"
       >
         {selectedFlagDrawer && (
           <div className="space-y-5">
-            {/* Status Header Badge */}
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/80 bg-muted/20">
-              <span className="text-xs font-medium text-muted-foreground">
-                Evaluation Verdict:
-              </span>
-              <div className="flex items-center gap-2 flex-wrap">
+            {/* Verdict Card */}
+            <div className="p-3.5 rounded-lg border border-border bg-card flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Evaluation:</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {selectedFlagDrawer.obsolete && (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                    <AlertCircle className="h-4 w-4" />
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-attention-foreground bg-attention-subtle px-2 py-0.5 rounded border border-attention/30">
+                    <TrendingDown className="h-3.5 w-3.5 text-attention" aria-hidden="true" />
                     <span>Obsolete Curriculum</span>
                   </span>
                 )}
                 {selectedFlagDrawer.lowSample ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span>Low sample (flagging suppressed)</span>
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-attention-foreground bg-attention-subtle px-2 py-0.5 rounded border border-attention/30">
+                    <AlertTriangle className="h-3.5 w-3.5 text-attention" aria-hidden="true" />
+                    <span>Low Sample</span>
                   </span>
                 ) : selectedFlagDrawer.oversupplied ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
-                    <ShieldAlert className="h-4 w-4" />
-                    <span>Flagged Oversupplied</span>
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-negative-foreground bg-negative-subtle px-2 py-0.5 rounded border border-negative/30">
+                    <AlertTriangle className="h-3.5 w-3.5 text-negative" aria-hidden="true" />
+                    <span>Oversupplied Capacity</span>
                   </span>
                 ) : !selectedFlagDrawer.obsolete ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Balanced Supply (OK)</span>
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-positive-foreground bg-positive-subtle px-2 py-0.5 rounded border border-positive/30">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-positive" aria-hidden="true" />
+                    <span>Balanced Supply</span>
                   </span>
                 ) : null}
               </div>
@@ -1061,118 +999,109 @@ export default function WorkforceSkillGapsPage() {
 
             {/* Metrics Breakdown Grid */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <Users className="h-3.5 w-3.5" />
-                  <span>Training Seats</span>
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Training Seats
+                </span>
+                <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
+                  {formatInteger(selectedFlagDrawer.seats)}
                 </div>
-                <div className="text-xl font-bold font-mono tabular-nums text-foreground">
-                  {selectedFlagDrawer.seats.toLocaleString()}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground block">
                   {selectedFlagDrawer.trainers} trainers assigned
-                </div>
+                </span>
               </div>
 
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <Briefcase className="h-3.5 w-3.5" />
-                  <span>Est. Openings</span>
-                </div>
-                <div className="text-xl font-bold font-mono tabular-nums text-foreground">
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Est. Openings
+                </span>
+                <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
                   {selectedFlagDrawer.estimatedOpenings != null
                     ? selectedFlagDrawer.estimatedOpenings.toFixed(1)
                     : "—"}
                 </div>
-                <div className="text-[10px] text-muted-foreground">
-                  from {selectedFlagDrawer.postingsInWindow} job postings
-                </div>
+                <span className="text-[11px] text-muted-foreground block">
+                  from {selectedFlagDrawer.postingsInWindow} postings
+                </span>
               </div>
 
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <Percent className="h-3.5 w-3.5" />
-                  <span>Oversupply Ratio</span>
-                </div>
-                <div className="text-xl font-bold font-mono tabular-nums text-foreground">
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Oversupply Ratio
+                </span>
+                <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
                   {selectedFlagDrawer.oversupplyRatio != null
                     ? `${selectedFlagDrawer.oversupplyRatio.toFixed(2)}x`
                     : "—"}
                 </div>
-                <div className="text-[10px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground block">
                   Threshold: {flags?.oversupplyThreshold ?? 1.5}x
-                </div>
+                </span>
               </div>
 
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <BookOpen className="h-3.5 w-3.5" />
-                  <span>Offering Year</span>
-                </div>
-                <div className="text-xl font-bold font-mono tabular-nums text-foreground">
-                  {selectedFlagDrawer.year}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  {selectedFlagDrawer.linkedRoleCount} linked roles
-                </div>
-              </div>
-
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <Percent className="h-3.5 w-3.5" />
-                  <span>Curriculum Coverage</span>
-                </div>
-                <div className="text-xl font-bold font-mono tabular-nums text-foreground">
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Course Coverage
+                </span>
+                <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
                   {selectedFlagDrawer.coverage != null
                     ? `${selectedFlagDrawer.coverage.toFixed(1)}%`
                     : "—"}
                 </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Threshold: &lt; {flags?.obsoleteCoverageThreshold ?? 40.0}%
-                </div>
+                <span className="text-[11px] text-muted-foreground block">
+                  Threshold: &lt; {flags?.obsoleteCoverageThreshold ?? 40}%
+                </span>
               </div>
 
-              <div className="rounded-md border border-border p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <TrendingDown className="h-3.5 w-3.5" />
-                  <span>Key Skill Trend</span>
-                </div>
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Key Skill Trend
+                </span>
                 <div className="pt-0.5">
                   <DeltaBadge value={selectedFlagDrawer.keySkillTrend ?? 0} size="sm" />
                 </div>
-                <div className="text-[10px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground block">
                   {selectedFlagDrawer.fallingSkillCount ?? 0} of {selectedFlagDrawer.keySkillCount ?? 0} skills falling
+                </span>
+              </div>
+
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Offering Year
+                </span>
+                <div className="font-serif text-xl font-bold font-mono tabular-nums text-foreground">
+                  {selectedFlagDrawer.year}
                 </div>
+                <span className="text-[11px] text-muted-foreground block">
+                  {selectedFlagDrawer.linkedRoleCount} linked roles
+                </span>
               </div>
             </div>
 
-            {/* Explanation Note */}
-            <div className="rounded-lg border border-border bg-card p-4 space-y-2 text-xs">
-              <h4 className="font-semibold text-foreground">Policy Analysis</h4>
-              {selectedFlagDrawer.obsolete && (
-                <p className="text-amber-800 dark:text-amber-300 bg-amber-500/10 p-2.5 rounded border border-amber-500/20 leading-relaxed">
-                  Curriculum coverage ({selectedFlagDrawer.coverage != null ? `${selectedFlagDrawer.coverage.toFixed(1)}%` : "0%"}) is below the {flags?.obsoleteCoverageThreshold ?? 40}% threshold, and key taught skills contract at an average rate of {((selectedFlagDrawer.keySkillTrend ?? 0) * 100).toFixed(1)} pp. {selectedFlagDrawer.fallingSkillCount ?? 0} of {selectedFlagDrawer.keySkillCount ?? 0} key skills show declining employer hiring demand.
-                </p>
-              )}
-              <p className="text-muted-foreground leading-relaxed">
-                {selectedFlagDrawer.lowSample
-                  ? `Estimated openings (${selectedFlagDrawer.estimatedOpenings?.toFixed(1) ?? 0}) are below the minimum threshold of ${flags?.minOpenings ?? 20}. To avoid policy distortion from small district sample sizes, this offering is not flagged as oversupplied.`
-                  : selectedFlagDrawer.oversupplied
-                  ? `Training seat capacity (${selectedFlagDrawer.seats}) exceeds estimated market openings (${selectedFlagDrawer.estimatedOpenings?.toFixed(1)}) by ${selectedFlagDrawer.oversupplyRatio?.toFixed(2)}x. This surpasses the policy threshold of ${flags?.oversupplyThreshold ?? 1.5}x with a verified sample size.`
-                  : `Training seat capacity is well-aligned with market openings (${selectedFlagDrawer.oversupplyRatio?.toFixed(2)}x vs threshold ${flags?.oversupplyThreshold ?? 1.5}x).`}
-              </p>
-              <p className="text-[11px] text-muted-foreground italic pt-1 border-t border-border/40">
-                Calculation: estimatedOpenings = postingsInWindow × scalingFactor ({flags?.scalingFactor ?? 1.0}). Assumes 1 job posting = 1 opening.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href={`/policy/course-recommendations?course=${selectedFlagDrawer.courseId}&district=${selectedFlagDrawer.districtId}`}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                >
-                  <span>View recommendations</span>
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
+            {/* Thresholds & Parameters Card (moved from wide table) */}
+            <div className="p-3.5 rounded-lg border border-border/80 bg-muted/20 text-xs space-y-1.5">
+              <span className="font-semibold text-foreground">Evaluation Parameters:</span>
+              <ul className="text-[11px] text-muted-foreground space-y-1">
+                <li>• Window: {flags?.windowStart} to {flags?.windowEnd} ({flags?.windowMonths} months)</li>
+                <li>• Scaling factor: {flags?.scalingFactor ?? 1.0} (1 job posting = 1 opening)</li>
+                <li>• Oversupply threshold: {flags?.oversupplyThreshold ?? 1.5}x</li>
+                <li>• Minimum openings guard: {flags?.minOpenings ?? 20} (suppresses small-sample noise)</li>
+                <li>• Obsolete coverage threshold: {flags?.obsoleteCoverageThreshold ?? 40}%</li>
+              </ul>
+            </div>
+
+            {/* View Recommendations Link */}
+            <div className="pt-2 border-t border-border flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                Actionable curriculum advice:
+              </span>
+              <Link
+                href={`/policy/course-recommendations?course=${selectedFlagDrawer.courseId}&district=${selectedFlagDrawer.districtId}`}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+              >
+                <span>Open course recommendations</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
         )}
