@@ -2,9 +2,10 @@
 
 import React, { useRef } from "react"
 import { Database, Calendar, MapPin } from "lucide-react"
-import { useInView } from "motion/react"
+import { motion, useInView } from "motion/react"
 import { DeltaBadge } from "./delta-badge"
-import { useCountUp } from "./motion-hooks"
+import { useCountUp, usePrefersReducedMotion } from "./motion-hooks"
+import { splitFindingIntoSegments } from "@/lib/findings"
 import { cn } from "@/lib/utils"
 
 /* ==========================================================================
@@ -27,18 +28,39 @@ export function FindingHeadline({
   children,
   className = "",
 }: FindingHeadlineProps) {
+  const reducedMotion = usePrefersReducedMotion()
+  const segments = splitFindingIntoSegments(sentence)
+
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <motion.div
+      initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reducedMotion ? 0 : 0.24, ease: "easeOut" }}
+      className={cn("space-y-1 border-l-[3px] border-primary pl-3.5", className)}
+    >
       {kicker && (
         <span className="block text-[11px] font-semibold uppercase tracking-wider text-primary">
           {kicker}
         </span>
       )}
-      <h3 className="font-serif text-lg sm:text-xl font-semibold tracking-tight text-foreground leading-snug text-balance">
-        {sentence}
+      <h3 className="font-serif text-base sm:text-lg font-semibold tracking-tight text-foreground leading-snug text-balance">
+        {segments.length > 0
+          ? segments.map((seg, i) =>
+              seg.highlight ? (
+                <span
+                  key={i}
+                  className="font-bold underline decoration-primary/40 decoration-2 underline-offset-4"
+                >
+                  {seg.text}
+                </span>
+              ) : (
+                <React.Fragment key={i}>{seg.text}</React.Fragment>
+              )
+            )
+          : sentence}
       </h3>
-      {children && <div className="mt-1 text-xs text-muted-foreground">{children}</div>}
-    </div>
+      {children && <div className="mt-0.5 text-xs text-muted-foreground">{children}</div>}
+    </motion.div>
   )
 }
 
@@ -88,11 +110,15 @@ export function BigNumber({
   )
 
   let display: string
+  let finalDisplay: string
   if (rawValue !== undefined) {
-    display = animate ? animated.toLocaleString("en-IN") : rawValue.toLocaleString("en-IN")
+    finalDisplay = rawValue.toLocaleString("en-IN")
+    display = animate ? animated.toLocaleString("en-IN") : finalDisplay
   } else if (value !== undefined) {
-    display = typeof value === "number" ? value.toLocaleString("en-IN") : String(value)
+    finalDisplay = typeof value === "number" ? value.toLocaleString("en-IN") : String(value)
+    display = finalDisplay
   } else {
+    finalDisplay = "—"
     display = "—"
   }
 
@@ -111,13 +137,17 @@ export function BigNumber({
         {label}
       </div>
 
-      <div className="mt-1.5 flex items-baseline gap-2.5 flex-wrap">
+      <div className="mt-1 flex items-baseline gap-2.5 flex-wrap">
+        {rawValue !== undefined && animate && (
+          <span className="sr-only">{finalDisplay}</span>
+        )}
         <span
+          aria-hidden={rawValue !== undefined && animate ? true : undefined}
           className={cn(
             "font-serif font-bold tracking-tight text-foreground tabular-nums",
             isTextVal
-              ? "text-xl sm:text-2xl leading-snug"
-              : "text-3xl sm:text-4xl leading-none"
+              ? "text-lg sm:text-xl leading-snug"
+              : "text-2xl sm:text-3xl leading-none"
           )}
         >
           {display}
@@ -133,7 +163,7 @@ export function BigNumber({
       </div>
 
       {footnote && (
-        <p className="mt-1.5 text-xs text-muted-foreground leading-4" title={footnote}>
+        <p className="mt-1 text-xs text-muted-foreground leading-4">
           {footnote}
         </p>
       )}
@@ -212,7 +242,7 @@ export function FigureRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-1 gap-y-5 sm:gap-y-6 divide-y sm:divide-y-0 sm:divide-x divide-border border-y border-border py-5",
+        "grid grid-cols-1 gap-y-4 sm:gap-y-5 divide-y sm:divide-y-0 sm:divide-x divide-border border-y border-border py-3",
         gridCols,
         className
       )}
@@ -251,17 +281,17 @@ export function SectionHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between pt-6 border-t border-border pb-4",
+        "flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between pt-4 border-t border-border pb-3",
         className
       )}
     >
-      <div className="space-y-1 max-w-[65ch]">
+      <div className="space-y-0.5 max-w-[65ch]">
         {kicker && (
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-primary">
             {kicker}
           </span>
         )}
-        <h2 className="font-serif text-xl font-semibold tracking-tight text-foreground leading-snug">
+        <h2 className="font-serif text-lg sm:text-xl font-semibold tracking-tight text-foreground leading-snug">
           {title}
         </h2>
         {subtitle && (

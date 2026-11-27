@@ -257,9 +257,12 @@ export default function DescribeMyselfPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <input
+                  id="student-skill-search"
+                  name="skillSearch"
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search skills by name or alias"
                   placeholder="Search skills by name or alias (e.g. Python, K8s, AWS, React)..."
                   className="w-full rounded-md border border-border bg-background pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />

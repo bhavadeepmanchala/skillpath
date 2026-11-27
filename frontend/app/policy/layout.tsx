@@ -304,7 +304,7 @@ export default function PolicyLayout({
 
         {/* Main Content: Centred Editorial Container */}
         <ReadinessProvider>
-          <main className="flex-1 w-full max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          <main className="flex-1 w-full max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
             {children}
           </main>
         </ReadinessProvider>

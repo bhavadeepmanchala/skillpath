@@ -311,7 +311,10 @@ export default function JobMarketTrendsPage() {
     }
   }, [activeTrendItem, drawerTrend])
 
-  const isChartAnimationActive = useChartAnimation()
+  const isChartAnimationActive = useChartAnimation(
+    Boolean(drawerSkill),
+    Boolean(drawerTrend?.points?.length)
+  )
 
   // Finding sentence calculation
   const findingHeadline = useMemo(() => {
@@ -324,16 +327,12 @@ export default function JobMarketTrendsPage() {
   }, [trends, selectedDistrictId, selectedDistrictName])
 
   return (
-    <div className="space-y-8 animate-page-enter">
+    <div className="space-y-4 animate-page-enter">
       {/* 1. Page Header with standfirst */}
       <PageHeader
         title="Job Market Trends"
         standfirst="Longitudinal trajectories of skill demand: identifying accelerating competencies and contracting requirements across India."
-        showSyntheticBadge
-        breadcrumbs={[
-          { label: "Policymaker", href: "/policy" },
-          { label: "Job Market Trends" },
-        ]}
+        showSyntheticBadge={false}
       />
 
       {/* 2. Filter Bar: District & Window */}
@@ -367,7 +366,7 @@ export default function JobMarketTrendsPage() {
       </FilterBar>
 
       {/* 3. Finding Headline & Open FigureRow */}
-      <section className="space-y-6">
+      <section className="space-y-3.5">
         {trendsLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-6 w-3/4" />
@@ -534,145 +533,6 @@ export default function JobMarketTrendsPage() {
           </div>
         )}
       </section>
-
-      {/* ===================================================================== */}
-      {/* SECTION 2: Rising and Declining Skills (Open typographic lists)       */}
-      {/* ===================================================================== */}
-      <div className="grid gap-10 lg:grid-cols-2">
-        {/* Top Rising Skills */}
-        <section>
-          <SectionHeader
-            title="Accelerating Competencies (Rising)"
-            subtitle={`Bar length = size of the change in share; number = current share. ${visibleRising.length} skills shown.`}
-          />
-
-          {trendsLoading ? (
-            <TableSkeleton rows={5} cols={3} />
-          ) : trendsError ? (
-            <ErrorState message={trendsError} onRetry={loadTrends} compact />
-          ) : visibleRising.length === 0 ? (
-            <EmptyState title="No rising skills" description="No skills passed the threshold." />
-          ) : (
-            <div className="divide-y divide-border/70 border-b border-border/70">
-              {visibleRising.map((item, idx) => {
-                const widthPct = Math.min(100, Math.max(8, Math.round((Math.abs(item.change) / maxRisingChange) * 100)))
-                const lowSample = isLowSample(item.postingsLatest)
-
-                return (
-                  <TypographicRow
-                    key={item.skillId}
-                    rank={idx + 1}
-                    title={item.name}
-                    subtitle={item.category}
-                    staggerIndex={idx}
-                    primaryFigure={formatPercent(item.shareLatest)}
-                    badges={
-                      <div className="flex items-center gap-1.5">
-                        {lowSample && <LowSampleBadge />}
-                        <DeltaBadge value={item.change} size="sm" showLabel />
-                      </div>
-                    }
-                    onClick={() => openSkillDrawer(item.skillId, item.name)}
-                    visual={
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-1.5 flex-1 rounded-full bg-muted/60 overflow-hidden" aria-hidden="true">
-                          <div
-                            className="h-full rounded-full bg-positive transition-all duration-300"
-                            style={{ width: `${widthPct}%` }}
-                          />
-                        </div>
-                        <span className="text-[11px] font-mono tabular-nums font-medium text-positive-foreground shrink-0">
-                          {formatPercentagePoints(item.change)}
-                        </span>
-                      </div>
-                    }
-                  />
-                )
-              })}
-            </div>
-          )}
-
-          {processedRising.length > 10 && (
-            <div className="pt-3 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Top {visibleRising.length} of {processedRising.length}</span>
-              <button
-                type="button"
-                onClick={() => setShowAllRising((prev) => !prev)}
-                className="font-semibold text-primary hover:underline"
-              >
-                {showAllRising ? "Show top 10" : `Show all ${processedRising.length}`}
-              </button>
-            </div>
-          )}
-        </section>
-
-        {/* Top Declining Skills */}
-        <section>
-          <SectionHeader
-            title="Contracting Requirements (Declining)"
-            subtitle={`Bar length = size of the change in share; number = current share. ${visibleDeclining.length} skills shown.`}
-          />
-
-          {trendsLoading ? (
-            <TableSkeleton rows={5} cols={3} />
-          ) : trendsError ? (
-            <ErrorState message={trendsError} onRetry={loadTrends} compact />
-          ) : visibleDeclining.length === 0 ? (
-            <EmptyState title="No declining skills" description="No skills recorded contracting momentum." />
-          ) : (
-            <div className="divide-y divide-border/70 border-b border-border/70">
-              {visibleDeclining.map((item, idx) => {
-                const widthPct = Math.min(100, Math.max(8, Math.round((Math.abs(item.change) / maxDecliningChange) * 100)))
-                const lowSample = isLowSample(item.postingsLatest)
-
-                return (
-                  <TypographicRow
-                    key={item.skillId}
-                    rank={idx + 1}
-                    title={item.name}
-                    subtitle={item.category}
-                    staggerIndex={idx}
-                    primaryFigure={formatPercent(item.shareLatest)}
-                    badges={
-                      <div className="flex items-center gap-1.5">
-                        {lowSample && <LowSampleBadge />}
-                        <DeltaBadge value={item.change} size="sm" showLabel />
-                      </div>
-                    }
-                    onClick={() => openSkillDrawer(item.skillId, item.name)}
-                    visual={
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-1.5 flex-1 rounded-full bg-muted/60 overflow-hidden" aria-hidden="true">
-                          <div
-                            className="h-full rounded-full bg-negative transition-all duration-300"
-                            style={{ width: `${widthPct}%` }}
-                          />
-                        </div>
-                        <span className="text-[11px] font-mono tabular-nums font-medium text-negative-foreground shrink-0">
-                          {formatPercentagePoints(item.change)}
-                        </span>
-                      </div>
-                    }
-                  />
-                )
-              })}
-            </div>
-          )}
-
-          {processedDeclining.length > 10 && (
-            <div className="pt-3 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Top {visibleDeclining.length} of {processedDeclining.length}</span>
-              <button
-                type="button"
-                onClick={() => setShowAllDeclining((prev) => !prev)}
-                className="font-semibold text-primary hover:underline"
-              >
-                {showAllDeclining ? "Show top 10" : `Show all ${processedDeclining.length}`}
-              </button>
-            </div>
-          )}
-        </section>
-      </div>
 
       {/* Caution footnote */}
       <div className="rounded-lg border border-border/80 bg-muted/20 p-3.5 flex items-start gap-2.5 text-xs text-muted-foreground">

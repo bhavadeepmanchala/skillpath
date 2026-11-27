@@ -72,3 +72,33 @@ export function computeDumbbellPositions(
     direction,
   }
 }
+
+export interface DumbbellConnectorMeta {
+  direction: "up" | "down" | "flat"
+  tone: "positive" | "negative" | "neutral"
+  minLengthPct: number
+  arrowDirection: "right" | "left" | "none"
+}
+
+/**
+ * Pure visual encoding helper for the dumbbell connector and arrowhead.
+ * Ensures a visible minimum connector length and directional arrow even when dots nearly overlap.
+ */
+export function getDumbbellConnectorMeta(
+  pos: DumbbellPositions
+): DumbbellConnectorMeta {
+  if (pos.direction === "flat") {
+    return {
+      direction: "flat",
+      tone: "neutral",
+      minLengthPct: 0,
+      arrowDirection: "none",
+    }
+  }
+  return {
+    direction: pos.direction,
+    tone: pos.direction === "up" ? "positive" : "negative",
+    minLengthPct: Math.max(1.5, pos.lineWidthPct),
+    arrowDirection: pos.direction === "up" ? "right" : "left",
+  }
+}

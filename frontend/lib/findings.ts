@@ -93,6 +93,68 @@ export function formatMonthRange(from?: string, to?: string): string {
   return formatMonthYear(to || from)
 }
 
+export interface FindingSegment {
+  text: string
+  highlight?: boolean
+}
+
+const LEADING_SUBJECT_VERBS = [
+  " leads ",
+  " shows ",
+  " covers ",
+  " has ",
+  " appears ",
+  " accounts ",
+  " training capacity ",
+]
+
+/**
+ * Splits a deterministic finding sentence into plain and highlighted segments
+ * (leading subject and key numeric figures) for typographic emphasis without relying on colour alone.
+ */
+export function splitFindingIntoSegments(sentence: string): FindingSegment[] {
+  if (!sentence) return []
+
+  const segments: FindingSegment[] = []
+  let rest = sentence
+
+  // Highlight leading proper subject if followed by a known finding verb
+  let earliestIdx = -1
+  for (const verb of LEADING_SUBJECT_VERBS) {
+    const idx = rest.indexOf(verb)
+    if (idx > 0 && idx <= 60 && (earliestIdx === -1 || idx < earliestIdx)) {
+      earliestIdx = idx
+    }
+  }
+
+  if (earliestIdx > 0) {
+    const subject = rest.slice(0, earliestIdx)
+    // Avoid highlighting generic leading words like "Tracking" or "Observing"
+    if (!/^(Tracking|Observing|No |All )/i.test(subject)) {
+      segments.push({ text: subject, highlight: true })
+      rest = rest.slice(earliestIdx)
+    }
+  }
+
+  const figureRegex = /([+-]?\d[\d,]*(?:\.\d+)?(?:\s*(?:%|pp|x))?(?![-a-zA-Z]))/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = figureRegex.exec(rest)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ text: rest.slice(lastIndex, match.index), highlight: false })
+    }
+    segments.push({ text: match[0], highlight: true })
+    lastIndex = match.index + match[0].length
+  }
+
+  if (lastIndex < rest.length) {
+    segments.push({ text: rest.slice(lastIndex), highlight: false })
+  }
+
+  return segments
+}
+
 /**
  * Builds a finding sentence for national or district summary metrics.
  */

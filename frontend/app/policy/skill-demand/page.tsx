@@ -334,7 +334,10 @@ function SkillDemandContent() {
     }))
   }, [drawerTrend, drawerNationalTrend])
 
-  const isChartAnimationActive = useChartAnimation()
+  const isChartAnimationActive = useChartAnimation(
+    isDrawerOpen,
+    Boolean(drawerTrend?.points?.length)
+  )
 
   const validatedSkillsCount = useMemo(() => {
     if (!skillsData) return 0
@@ -344,12 +347,12 @@ function SkillDemandContent() {
   }, [skillsData])
 
   return (
-    <div className="space-y-8 animate-page-enter">
+    <div className="space-y-4 animate-page-enter">
       {/* 1. Header */}
       <PageHeader
         title="Skill Demand Analysis"
         standfirst="Granular demand distribution across skills, employer validation signals, and previous-to-latest shifts."
-        showSyntheticBadge
+        showSyntheticBadge={false}
       />
 
       {/* 2. Filter Bar (Interactive controls kept in a clean bar) */}
@@ -403,7 +406,7 @@ function SkillDemandContent() {
       </FilterBar>
 
       {/* 3. Editorial Finding Headline & Open FigureRow */}
-      <section className="space-y-6">
+      <section className="space-y-3.5">
         {skillsLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-6 w-3/4" />
@@ -473,6 +476,8 @@ function SkillDemandContent() {
                 aria-hidden="true"
               />
               <input
+                id="skill-demand-search"
+                name="skillDemandSearch"
                 type="text"
                 placeholder="Search skills or category..."
                 value={searchQuery}
@@ -536,7 +541,7 @@ function SkillDemandContent() {
                         {totalVotes > 0 && (
                           <span
                             className="inline-flex items-center gap-1 text-[11px] text-muted-foreground border border-border/80 rounded px-1.5 py-0.5 font-mono tabular-nums bg-muted/30"
-                            title={`Bayesian confidence: ${confPct}% (${skill.confirmedCount ?? 0} confirmed, ${skill.disputedCount ?? 0} disputed)`}
+                            title={`Confidence from employer votes: ${confPct}% (${skill.confirmedCount ?? 0} confirmed, ${skill.disputedCount ?? 0} disputed)`}
                           >
                             <ShieldCheck className="h-3 w-3 text-primary" aria-hidden="true" />
                             <span>{confPct}%</span>
@@ -608,7 +613,7 @@ function SkillDemandContent() {
 
             <div className="p-3.5 rounded-lg border border-border/80 bg-muted/20 text-xs space-y-1">
               <span className="font-semibold text-foreground">
-                Bayesian Confidence Formula:
+                Confidence Formula:
               </span>
               <p className="font-mono text-[11px] text-muted-foreground">
                 confidence = (confirmed + 1) / (confirmed + disputed + 2)
@@ -726,6 +731,7 @@ function SkillDemandContent() {
                           strokeWidth={1.5}
                           strokeDasharray="4 4"
                           dot={false}
+                          isAnimationActive={isChartAnimationActive}
                         />
                       )}
                     </AreaChart>

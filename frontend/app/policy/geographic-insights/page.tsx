@@ -191,16 +191,12 @@ export default function GeographicInsightsPage() {
   }, [filteredDistricts, totalPostingsInScope, selectedState])
 
   return (
-    <div className="space-y-8 animate-page-enter">
+    <div className="space-y-5 animate-page-enter">
       {/* 1. Page Header with standfirst */}
       <PageHeader
         title="Geographic Insights"
         standfirst="Spatial concentration of hiring demand across 40 monitored districts in 16 Indian states."
-        showSyntheticBadge
-        breadcrumbs={[
-          { label: "Policymaker", href: "/policy" },
-          { label: "Geographic Insights" },
-        ]}
+        showSyntheticBadge={false}
       />
 
       {/* 2. Filter Bar: State, Search & Date Range */}
@@ -229,7 +225,10 @@ export default function GeographicInsightsPage() {
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
           <input
+            id="geo-district-search"
+            name="districtSearch"
             type="text"
+            aria-label="Search district or state"
             placeholder="Search district or state..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -243,6 +242,7 @@ export default function GeographicInsightsPage() {
           </label>
           <input
             id="from-month"
+            name="fromMonth"
             type="text"
             placeholder="YYYY-MM"
             value={fromDate}
@@ -254,6 +254,7 @@ export default function GeographicInsightsPage() {
           </label>
           <input
             id="to-month"
+            name="toMonth"
             type="text"
             placeholder="YYYY-MM"
             value={toDate}

@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useId } from "react"
 import { motion } from "motion/react"
 import { ArrowRight, Search } from "lucide-react"
 import { usePrefersReducedMotion } from "./motion-hooks"
@@ -100,11 +100,15 @@ export function TypographicRow({
   )
 
   const rowClass = cn(
-    "group w-full text-left py-3.5 px-2 -mx-2 rounded-md transition-colors duration-120",
-    active ? "bg-primary/5 ring-1 ring-primary/30" : "hover:bg-muted/40",
+    "group w-full text-left py-2.5 px-2 -mx-2 rounded-md transition-colors duration-120",
+    active
+      ? "bg-primary/[0.07] border-l-2 border-l-primary pl-2.5"
+      : "hover:bg-primary/[0.04]",
     onClick ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : "",
     className
   )
+
+  const staggerDelay = reducedMotion || staggerIndex >= 12 ? 0 : staggerIndex * 0.03
 
   if (onClick) {
     return (
@@ -115,7 +119,7 @@ export function TypographicRow({
         animate={{ opacity: 1, y: 0 }}
         transition={{
           duration: reducedMotion ? 0 : 0.2,
-          delay: reducedMotion ? 0 : Math.min(staggerIndex * 0.025, 0.25),
+          delay: staggerDelay,
         }}
         onClick={onClick}
         aria-label={ariaLabel}
@@ -133,7 +137,7 @@ export function TypographicRow({
       animate={{ opacity: 1, y: 0 }}
       transition={{
         duration: reducedMotion ? 0 : 0.2,
-        delay: reducedMotion ? 0 : Math.min(staggerIndex * 0.025, 0.25),
+        delay: staggerDelay,
       }}
       aria-label={ariaLabel}
       className={rowClass}
@@ -170,6 +174,7 @@ export function TypographicList({
   itemLabel = "items",
   className = "",
 }: TypographicListProps) {
+  const searchId = useId()
   const showSearch = onSearchChange !== undefined && totalCount > showSearchThreshold
 
   return (
@@ -181,6 +186,8 @@ export function TypographicList({
             aria-hidden="true"
           />
           <input
+            id={searchId}
+            name={searchId}
             type="text"
             value={searchQuery ?? ""}
             onChange={(e) => onSearchChange(e.target.value)}

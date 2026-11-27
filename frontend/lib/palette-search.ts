@@ -58,7 +58,7 @@ export const POLICY_PAGE_ENTRIES: PaletteEntry[] = [
     id: "page-employer-validation",
     group: "Pages",
     title: "Employer Validation",
-    subtitle: "Confirm or dispute skill requirements with Bayesian confidence",
+    subtitle: "Confirm or dispute skill requirements with confidence from employer votes",
     keywords: ["validate", "confirm", "dispute", "feedback", "votes"],
     href: "/policy/employer-validation",
   },
@@ -131,17 +131,21 @@ export function searchPaletteEntries(
   limitPerGroup: number = 6
 ): { groups: Array<{ group: PaletteGroup; items: PaletteEntry[] }>; total: number } {
   const trimmed = query.trim()
-  const scored: Array<{ entry: PaletteEntry; score: number }> = []
+  const scored: Array<{ entry: PaletteEntry; score: number; index: number }> = []
 
-  for (const entry of entries) {
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]
     const score = fuzzyScore(trimmed, entry)
     if (score > 0) {
-      scored.push({ entry, score })
+      scored.push({ entry, score, index: i })
     }
   }
 
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score
+    if (a.entry.group === "Pages" && b.entry.group === "Pages") {
+      return a.index - b.index
+    }
     return a.entry.title.localeCompare(b.entry.title)
   })
 

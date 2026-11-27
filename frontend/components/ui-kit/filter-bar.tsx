@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useId } from "react"
 import { Filter } from "lucide-react"
 
 export interface FilterBarProps {
@@ -16,7 +16,7 @@ export function FilterBar({
 }: FilterBarProps) {
   return (
     <div
-      className={`flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3 text-card-foreground shadow-resting ${className}`}
+      className={`flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-card-foreground shadow-resting ${className}`}
     >
       <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-1">
         <Filter className="h-3.5 w-3.5" aria-hidden="true" />
@@ -39,7 +39,8 @@ export function FilterBar({
 }
 
 export interface SelectFieldProps {
-  id: string
+  id?: string
+  name?: string
   label: string
   value: string | number
   onChange: (value: string) => void
@@ -50,6 +51,7 @@ export interface SelectFieldProps {
 
 export function SelectField({
   id,
+  name,
   label,
   value,
   onChange,
@@ -57,13 +59,18 @@ export function SelectField({
   disabled = false,
   className = "",
 }: SelectFieldProps) {
+  const generatedId = useId()
+  const selectId = id || generatedId
+  const selectName = name || selectId
+
   return (
     <div className={`flex items-center gap-2 text-xs ${className}`}>
-      <label htmlFor={id} className="text-muted-foreground font-medium shrink-0">
+      <label htmlFor={selectId} className="text-muted-foreground font-medium shrink-0">
         {label}:
       </label>
       <select
-        id={id}
+        id={selectId}
+        name={selectName}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}

@@ -441,16 +441,12 @@ export default function WorkforceSkillGapsPage() {
   }, [roles, selectedDistrictId, selectedRoleId, courseSearch, flagsSearch, includeUnlinked])
 
   return (
-    <div className="space-y-8 animate-page-enter">
+    <div className="space-y-5 animate-page-enter">
       {/* 1. Page Header with standfirst */}
       <PageHeader
         title="Skill Gap Explorer"
         standfirst="Detect curriculum coverage deficits, oversupplied seat quotas, and nationwide workforce shortages."
-        showSyntheticBadge
-        breadcrumbs={[
-          { label: "Policymaker", href: "/policy" },
-          { label: "Skill Gap Explorer" },
-        ]}
+        showSyntheticBadge={false}
       />
 
       {/* 2. Filter Bar: Role, District & Reset */}
@@ -559,6 +555,8 @@ export default function WorkforceSkillGapsPage() {
               <div className="relative w-full sm:w-48">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <input
+                  id="gap-course-search"
+                  name="courseSearch"
                   type="text"
                   placeholder="Search course..."
                   value={courseSearch}
@@ -580,6 +578,8 @@ export default function WorkforceSkillGapsPage() {
               />
               <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground select-none">
                 <input
+                  id="gap-include-unlinked"
+                  name="includeUnlinked"
                   type="checkbox"
                   checked={includeUnlinked}
                   onChange={(e) => setIncludeUnlinked(e.target.checked)}
@@ -678,6 +678,8 @@ export default function WorkforceSkillGapsPage() {
               <div className="relative w-full sm:w-52">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <input
+                  id="gap-flags-search"
+                  name="flagsSearch"
                   type="text"
                   placeholder="Search course or district..."
                   value={flagsSearch}

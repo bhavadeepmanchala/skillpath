@@ -13,6 +13,7 @@ import {
   buildOversupplyFinding,
   buildRecommendationFinding,
   buildReadinessFinding,
+  splitFindingIntoSegments,
 } from "../findings"
 import { LOW_SAMPLE_THRESHOLD } from "../demand-api"
 
@@ -197,6 +198,19 @@ describe("sentence builders and fallbacks", () => {
       })
     ).toBe(
       "72% readiness for Backend Developer, covering 8 of 15 high-demand skills."
+    )
+  })
+
+  it("splits finding sentences into segments highlighting leading subject and key figures", () => {
+    const segs = splitFindingIntoSegments(
+      "Kubernetes leads demand growth for Software Engineer, appearing in 31% of postings (+6.0 pp over the trailing 3-month window)."
+    )
+    const highlighted = segs.filter((s) => s.highlight).map((s) => s.text)
+    expect(highlighted).toContain("Kubernetes")
+    expect(highlighted).toContain("31%")
+    expect(highlighted).toContain("+6.0 pp")
+    expect(segs.map((s) => s.text).join("")).toBe(
+      "Kubernetes leads demand growth for Software Engineer, appearing in 31% of postings (+6.0 pp over the trailing 3-month window)."
     )
   })
 })

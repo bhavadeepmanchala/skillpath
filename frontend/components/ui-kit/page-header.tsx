@@ -40,7 +40,7 @@ export function PageHeader({
   const subtitle = standfirst || description
 
   return (
-    <div className={cn("space-y-3 border-b border-border pb-6", className)}>
+    <div className={cn("space-y-2 border-b border-border pb-3.5", className)}>
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav
           aria-label="Breadcrumb"
@@ -74,26 +74,26 @@ export function PageHeader({
         </nav>
       )}
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1.5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
           {kicker && (
             <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
               {kicker}
             </div>
           )}
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-tight">
+            <h1 className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">
               {title}
             </h1>
             {showSyntheticBadge && <DataBadge />}
             {badge}
           </div>
           {subtitle && (
-            <p className="mt-1 text-sm sm:text-base font-normal text-muted-foreground leading-relaxed max-w-[70ch] text-balance">
+            <p className="mt-0.5 text-sm font-normal text-muted-foreground leading-snug max-w-[70ch] text-balance">
               {subtitle}
             </p>
           )}
-          {meta && <div className="pt-1 text-xs text-muted-foreground">{meta}</div>}
+          {meta && <div className="pt-0.5 text-xs text-muted-foreground">{meta}</div>}
         </div>
 
         {actions && <div className="flex items-center gap-2 shrink-0 self-start">{actions}</div>}

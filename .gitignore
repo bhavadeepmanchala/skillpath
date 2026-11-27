@@ -6,3 +6,4 @@ frontend/tsconfig.tsbuildinfo
 node_modules
 .env*.local
 *.local.ps1
+dev-out.log

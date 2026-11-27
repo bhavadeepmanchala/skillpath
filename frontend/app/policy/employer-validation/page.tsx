@@ -328,16 +328,12 @@ export default function EmployerValidationPage() {
   }, [selectedRole, selectedSkill, counts])
 
   return (
-    <div className="space-y-8 animate-page-enter">
-      {/* 1. Page Header (Single Synthetic data badge, no duplicate) */}
+    <div className="space-y-5 animate-page-enter">
+      {/* 1. Page Header (Synthetic data shown in masthead & source caption) */}
       <PageHeader
         title="Employer Validation"
-        standfirst="Verify or dispute whether demanded skills truly reflect hiring requirements for specific roles using Bayesian smoothing."
-        showSyntheticBadge
-        breadcrumbs={[
-          { label: "Policymaker", href: "/policy" },
-          { label: "Employer Validation" },
-        ]}
+        standfirst="Verify or dispute whether demanded skills truly reflect hiring requirements for specific roles using confidence from employer votes."
+        showSyntheticBadge={false}
       />
 
       {/* 2. Finding Headline & Open FigureRow */}
@@ -350,9 +346,9 @@ export default function EmployerValidationPage() {
             scope={
               selectedRole && selectedSkill
                 ? `${selectedRole.name} · ${selectedSkill.name}`
-                : "Ground-truth employer review"
+                : "Employer skill review"
             }
-            window="Continuous Bayesian smoothing"
+            window="Confidence = (confirmed + 1) / (confirmed + disputed + 2)"
             note="Stored in database and capped at 2,000 submissions"
           />
         </FindingHeadline>
@@ -372,7 +368,7 @@ export default function EmployerValidationPage() {
             <BigNumber
               label="Signal Confidence"
               value={counts ? `${(counts.confidence * 100).toFixed(1)}%` : "50.0%"}
-              footnote="Bayesian posterior"
+              footnote="Weighted by employer votes"
             />
             <BigNumber
               label="Pair Submissions"
@@ -392,7 +388,7 @@ export default function EmployerValidationPage() {
               Submit Employer Review
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Provide ground-truth industry input on whether a skill is genuinely required for an occupation.
+              Confirm or dispute whether a skill is genuinely required for an occupation.
             </p>
           </div>
 
@@ -486,12 +482,9 @@ export default function EmployerValidationPage() {
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-primary block">
                         Step 2
                       </span>
-                      <label
-                        htmlFor="skill-search-input"
-                        className="block text-xs font-semibold text-foreground"
-                      >
+                      <span className="block text-xs font-semibold text-foreground">
                         Choose a skill
-                      </label>
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -596,9 +589,11 @@ export default function EmployerValidationPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                         <input
                           id="skill-search-input"
+                          name="skillSearch"
                           type="text"
                           value={skillSearchQuery}
                           onChange={(e) => setSkillSearchQuery(e.target.value)}
+                          aria-label="Search 81 skills by name or alias"
                           placeholder="Search 81 skills by name or alias (e.g. Docker, Python, SQL)..."
                           className="w-full rounded-md border border-border bg-background pl-9 pr-8 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         />
@@ -663,11 +658,18 @@ export default function EmployerValidationPage() {
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-primary block">
                       Step 3
                     </span>
-                    <label className="block text-xs font-semibold text-foreground">
+                    <span
+                      id="step3-verdict-heading"
+                      className="block text-xs font-semibold text-foreground"
+                    >
                       Is this skill needed for the role?
-                    </label>
+                    </span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div
+                    role="group"
+                    aria-labelledby="step3-verdict-heading"
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                  >
                     <button
                       type="button"
                       onClick={() => setStatus("CONFIRMED")}
@@ -733,6 +735,7 @@ export default function EmployerValidationPage() {
                       </div>
                       <textarea
                         id="validation-note"
+                        name="validationNote"
                         value={note}
                         maxLength={500}
                         rows={3}
@@ -775,7 +778,7 @@ export default function EmployerValidationPage() {
         <div className="lg:col-span-5 space-y-6">
           <SectionHeader
             title="Live Validation Signals"
-            subtitle="Live employer consensus and empirical confidence for the selected pair."
+            subtitle="Live employer consensus and vote-based confidence for the selected pair."
             className="pt-0 border-t-0 pb-3 border-b border-border"
           />
 
@@ -862,13 +865,13 @@ export default function EmployerValidationPage() {
               {/* Formula Transparency Box */}
               <div className="rounded-md border border-border/70 bg-muted/30 p-3.5 space-y-1.5 text-xs">
                 <div className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider">
-                  Bayesian Smoothing Formula
+                  Confidence Formula
                 </div>
                 <div className="font-mono text-xs text-foreground bg-background p-2 rounded border border-border">
                   confidence = (confirmed + 1) / (confirmed + disputed + 2)
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
-                  Prior distribution assumes a balanced 50.0% confidence at 0 submissions, updating gradually with empirical feedback.
+                  Starts at 50.0% confidence when there are 0 votes, and updates gradually as employers confirm or dispute.
                 </p>
               </div>
             </div>

@@ -369,16 +369,12 @@ export default function DistrictPlanPage() {
   }, [plan])
 
   return (
-    <div className="space-y-8 animate-page-enter">
+    <div className="space-y-5 animate-page-enter">
       {/* 1. Page Header with standfirst */}
       <PageHeader
         title="District Training Plan"
         standfirst="Deterministic seat quotas, staffing allocations, and curriculum revisions tailored to local employer hiring."
-        showSyntheticBadge
-        breadcrumbs={[
-          { label: "Policymaker", href: "/policy" },
-          { label: "District Plan" },
-        ]}
+        showSyntheticBadge={false}
       />
 
       {/* 2. Filter Bar: District Selector */}
@@ -577,6 +573,13 @@ export default function DistrictPlanPage() {
                 </button>
               }
             />
+
+            <p className="text-[11px] font-mono text-muted-foreground">
+              Parameters: targetRatio {plan.config.targetRatio}x · expandBelowRatio{" "}
+              {plan.config.expandBelowRatio}x · reviseCoverageThreshold{" "}
+              {plan.config.reviseCoverageThreshold}% · seatsPerTrainer{" "}
+              {plan.config.seatsPerTrainer} · minOpenings {plan.config.minOpenings}
+            </p>
 
             {sortedCourseCards.length === 0 ? (
               <EmptyState

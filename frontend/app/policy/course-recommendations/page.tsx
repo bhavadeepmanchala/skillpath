@@ -313,16 +313,12 @@ function CourseRecommendationsContent() {
   }, [data, selectedDistrictName])
 
   return (
-    <div className="space-y-8 animate-page-enter">
+    <div className="space-y-4 animate-page-enter">
       {/* 1. Page Header with standfirst */}
       <PageHeader
         title="Course Recommendations"
         standfirst="Data-driven curriculum update guidance: emerging skills to add and declining competencies to retire based on employer hiring demand."
-        showSyntheticBadge
-        breadcrumbs={[
-          { label: "Policymaker", href: "/policy" },
-          { label: "Course Recommendations" },
-        ]}
+        showSyntheticBadge={false}
       />
 
       {/* 2. Filter Bar: Course & District */}
@@ -418,9 +414,9 @@ function CourseRecommendationsContent() {
 
       {/* Content State when course is loaded */}
       {selectedCourseId && !loading && !error && data && (
-        <div className="space-y-8">
+        <div className="space-y-5">
           {/* Finding Headline & Open FigureRow (no KPI boxes) */}
-          <section className="space-y-6">
+          <section className="space-y-3.5">
             <FindingHeadline
               kicker="Curriculum Evaluation Finding"
               sentence={findingHeadline}
@@ -481,37 +477,51 @@ function CourseRecommendationsContent() {
               { minMax: 20, step: 10, capAt: 100 }
             )
 
+            const useWideRight = data.retire.length === 0
+
             return (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                {/* LEFT COLUMN: What this course teaches (flagged retire candidates) */}
-                <section className="space-y-4">
+              <div
+                className={
+                  useWideRight
+                    ? "grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-8 items-start"
+                    : "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-8 items-start"
+                }
+              >
+                {/* LEFT COLUMN: Taught skills to retire */}
+                <section className="min-w-0 space-y-3">
                   <SectionHeader
-                    title="What this course teaches"
+                    title="Taught skills to retire"
                     subtitle={`Taught skills flagged under the 3-part retire rule (falling trend, decline ≥ ${Math.round(
                       data.retireMinDecline * 100
                     )}%, share ≤ ${Math.round(data.retireMaxShare * 100)}%).`}
-                    actions={
-                      data.retire.length > 0 ? (
-                        <div className="relative w-full sm:w-44">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                          <input
-                            type="text"
-                            placeholder="Filter taught..."
-                            value={retireSearch}
-                            onChange={(e) => setRetireSearch(e.target.value)}
-                            aria-label="Filter taught skills"
-                            className="w-full pl-8 pr-2.5 py-1 rounded-md border border-border bg-card text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          />
-                        </div>
-                      ) : undefined
-                    }
                   />
 
+                  {data.retire.length > 0 && (
+                    <div className="relative w-full sm:w-56">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                      <input
+                        id="retire-skill-filter"
+                        name="retireSkillFilter"
+                        type="text"
+                        placeholder="Filter taught..."
+                        value={retireSearch}
+                        onChange={(e) => setRetireSearch(e.target.value)}
+                        aria-label="Filter taught skills"
+                        className="w-full pl-8 pr-2.5 py-1 rounded-md border border-border bg-card text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                  )}
+
                   {data.retire.length === 0 ? (
-                    <EmptyState
-                      title="No taught skill meets the retire rule"
-                      description="All taught skills in this course either maintain stable demand, have mild contraction (< 10%), or remain dominant core skills (> 40% share)."
-                    />
+                    <div className="flex items-start gap-2.5 rounded-md border border-border/70 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+                      <CheckCircle2 className="h-4 w-4 text-positive shrink-0 mt-0.5" aria-hidden="true" />
+                      <p className="leading-snug">
+                        <strong className="font-semibold text-foreground">
+                          No taught skill meets the retire rule.
+                        </strong>{" "}
+                        All taught skills in this course either maintain stable demand, have mild contraction (&lt; 10%), or remain dominant core skills (&gt; 40% share).
+                      </p>
+                    </div>
                   ) : processedRetire.length === 0 ? (
                     <EmptyState
                       title="No matching skills"
@@ -581,18 +591,20 @@ function CourseRecommendationsContent() {
                   )}
                 </section>
 
-                {/* RIGHT COLUMN: What the market asks that it does not teach (Add list) */}
-                <section className="space-y-4">
+                {/* RIGHT COLUMN: Market asks, course does not teach (Add list) */}
+                <section className="min-w-0 space-y-3">
                   <SectionHeader
-                    title="What the market asks that it does not teach"
+                    title="Market asks, course does not teach"
                     subtitle={`Untaught skills with demand share ≥ ${Math.round(
                       data.minShareForAdd * 100
                     )}% and ≥ ${data.minPostings} postings in scope.`}
                     actions={
-                      data.add.length > 0 ? (
+                      useWideRight && data.add.length > 0 ? (
                         <div className="relative w-full sm:w-44">
                           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                           <input
+                            id="add-skill-filter"
+                            name="addSkillFilter"
                             type="text"
                             placeholder="Filter market adds..."
                             value={addSearch}
@@ -604,6 +616,22 @@ function CourseRecommendationsContent() {
                       ) : undefined
                     }
                   />
+
+                  {!useWideRight && data.add.length > 0 && (
+                    <div className="relative w-full sm:w-56">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                      <input
+                        id="add-skill-filter"
+                        name="addSkillFilter"
+                        type="text"
+                        placeholder="Filter market adds..."
+                        value={addSearch}
+                        onChange={(e) => setAddSearch(e.target.value)}
+                        aria-label="Filter market additions"
+                        className="w-full pl-8 pr-2.5 py-1 rounded-md border border-border bg-card text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                  )}
 
                   {data.add.length === 0 ? (
                     <EmptyState
@@ -636,7 +664,9 @@ function CourseRecommendationsContent() {
                               key={item.skillId}
                               rank={index + 1}
                               label={item.skillName}
-                              sublabel={`${formatInteger(item.postingsLatest)} openings`}
+                              sublabel={`${formatInteger(item.postingsLatest)} openings · ${
+                                item.score != null ? `score ${item.score.toFixed(2)}` : "score —"
+                              }`}
                               previousValue={item.previousShare * 100}
                               latestValue={item.latestShare * 100}
                               maxScale={splitScale}
@@ -650,9 +680,6 @@ function CourseRecommendationsContent() {
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <DeltaBadge value={item.trend} size="sm" />
                                   {hasLowSample && <LowSampleBadge />}
-                                  <span className="text-[11px] font-mono font-medium text-positive-foreground bg-positive-subtle px-1.5 py-0.5 rounded border border-positive/30">
-                                    {item.score != null ? `score ${item.score.toFixed(2)}` : "—"}
-                                  </span>
                                 </div>
                               }
                             />

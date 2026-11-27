@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import React, { useState, useEffect, useRef, useMemo, useCallback, useId } from "react"
 import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "motion/react"
@@ -65,6 +65,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
+  const searchInputId = useId()
 
   useEffect(() => {
     setMounted(true)
@@ -257,16 +258,18 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
             className="relative z-[90] w-full max-w-xl rounded-lg border border-border bg-card shadow-raised overflow-hidden"
           >
             {/* Search input header */}
-            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-background">
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset">
               <Search className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
               <input
                 ref={inputRef}
+                id={searchInputId}
+                name="commandPaletteSearch"
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search pages, skills, districts, courses, roles..."
                 aria-label="Search command palette"
-                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               />
               {loading && (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" aria-hidden="true" />

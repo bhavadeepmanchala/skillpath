@@ -529,6 +529,8 @@ export default function CareerNavigatorPage() {
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <input
+                          id={`student-skill-${skill.skillId}`}
+                          name={`skill-${skill.skillId}`}
                           type="checkbox"
                           checked={isTicked}
                           onChange={() => toggleSkillTick(skill.skillId)}

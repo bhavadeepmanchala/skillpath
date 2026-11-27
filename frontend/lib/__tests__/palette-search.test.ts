@@ -62,5 +62,16 @@ describe("searchPaletteEntries", () => {
     const capped = searchPaletteEntries("", SAMPLE_ENTRIES, 3)
     const pagesGroup = capped.groups.find((g) => g.group === "Pages")
     expect(pagesGroup?.items.length).toBe(3)
+    expect(pagesGroup?.items.map((p) => p.title)).toEqual([
+      "Overview",
+      "Skill Demand",
+      "Workforce Skill Gaps",
+    ])
+  })
+
+  it("uses plain language for Employer Validation in Pages entries", () => {
+    const ev = POLICY_PAGE_ENTRIES.find((p) => p.id === "page-employer-validation")
+    expect(ev?.subtitle).toContain("confidence from employer votes")
+    expect(ev?.subtitle).not.toContain("Bayesian")
   })
 })

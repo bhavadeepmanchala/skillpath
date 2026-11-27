@@ -51,6 +51,7 @@ import {
   ChartSkeleton,
   TableSkeleton,
   Skeleton,
+  useChartAnimation,
 } from "@/components/ui-kit"
 import {
   buildSummaryFinding,
@@ -95,6 +96,10 @@ export default function PolicyOverviewPage() {
   const [drawerLoading, setDrawerLoading] = useState(false)
   const [drawerError, setDrawerError] = useState<string | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const isDrawerChartAnimationActive = useChartAnimation(
+    isDrawerOpen,
+    Boolean(drawerTrend?.points?.length)
+  )
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -218,16 +223,16 @@ export default function PolicyOverviewPage() {
   }, [trends?.declining])
 
   return (
-    <div className="space-y-10 animate-page-enter">
+    <div className="space-y-5 animate-page-enter">
       {/* 1. Page Header */}
       <PageHeader
         title="Policy Intelligence Overview"
         standfirst="High-level workforce demand signals, macro skill trajectories, and curriculum alignment priorities across India."
-        showSyntheticBadge
+        showSyntheticBadge={false}
       />
 
       {/* 2. Editorial Finding Headline + Open FigureRow (no KPI boxes) */}
-      <section className="space-y-6">
+      <section className="space-y-3.5">
         {trendsLoading && summaryLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-6 w-3/4" />
@@ -319,7 +324,7 @@ export default function PolicyOverviewPage() {
             {/* Action 1: Oversupplied Offerings -> District Plan */}
             <Link
               href="/policy/district-plan"
-              className="group py-4 sm:px-5 sm:first:pl-0 sm:last:pr-0 hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
+              className="group py-2.5 sm:px-5 sm:first:pl-0 sm:last:pr-0 hover:bg-primary/[0.04] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center justify-between gap-2">
@@ -328,15 +333,15 @@ export default function PolicyOverviewPage() {
                   </span>
                   <AlertTriangle className="h-4 w-4 text-attention shrink-0" aria-hidden="true" />
                 </div>
-                <div className="mt-1.5 font-serif text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                <div className="mt-1 font-serif text-xl font-bold tracking-tight text-foreground tabular-nums">
                   {attentionMetrics.oversupplied}{" "}
                   {attentionMetrics.oversupplied === 1 ? "Offering" : "Offerings"}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
                   Seat quotas substantially exceed estimated local job openings.
                 </p>
               </div>
-              <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
+              <div className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
                 <span>Review District Plan</span>
                 <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
               </div>
@@ -345,7 +350,7 @@ export default function PolicyOverviewPage() {
             {/* Action 2: Obsolete Offerings -> Skill Gap Explorer */}
             <Link
               href="/policy/workforce-skill-gaps"
-              className="group py-4 sm:px-5 hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
+              className="group py-2.5 sm:px-5 hover:bg-primary/[0.04] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center justify-between gap-2">
@@ -354,15 +359,15 @@ export default function PolicyOverviewPage() {
                   </span>
                   <ShieldAlert className="h-4 w-4 text-negative shrink-0" aria-hidden="true" />
                 </div>
-                <div className="mt-1.5 font-serif text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                <div className="mt-1 font-serif text-xl font-bold tracking-tight text-foreground tabular-nums">
                   {attentionMetrics.obsolete}{" "}
                   {attentionMetrics.obsolete === 1 ? "Offering" : "Offerings"}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
                   Low core coverage combined with contracting demand in taught skills.
                 </p>
               </div>
-              <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
+              <div className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
                 <span>Investigate Skill Gaps</span>
                 <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
               </div>
@@ -371,7 +376,7 @@ export default function PolicyOverviewPage() {
             {/* Action 3: Low Coverage / Skills to Update -> Course Recommendations */}
             <Link
               href="/policy/course-recommendations"
-              className="group py-4 sm:px-5 sm:last:pr-0 hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
+              className="group py-2.5 sm:px-5 sm:last:pr-0 hover:bg-primary/[0.04] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center justify-between gap-2">
@@ -675,6 +680,7 @@ export default function PolicyOverviewPage() {
                         fill="var(--primary)"
                         fillOpacity={0.15}
                         strokeWidth={2}
+                        isAnimationActive={isDrawerChartAnimationActive}
                       />
                     </AreaChart>
                   </ResponsiveContainer>

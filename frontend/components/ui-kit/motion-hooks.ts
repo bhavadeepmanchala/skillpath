@@ -78,26 +78,44 @@ export function useCountUp(
     return () => cancelAnimationFrame(animId)
   }, [target, durationMs, reducedMotion, enabled])
 
-  return current
+  return reducedMotion ? target : current
 }
 
 /**
  * Recharts entry animation control:
- * Plays ~550ms ease-out on initial mount, disabled on subsequent filter updates, disabled under reduced motion.
+ * Plays ~550ms ease-out once each time a container/drawer opens and data becomes ready,
+ * does not replay when data refetches or internal filters change while open, and disables under reduced motion.
  */
-export function useChartAnimation(): boolean {
+export function useChartAnimation(
+  isOpen: boolean = true,
+  hasData: boolean = true
+): boolean {
   const reducedMotion = usePrefersReducedMotion()
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [animating, setAnimating] = useState(false)
+  const hasAnimatedRef = useRef(false)
 
   useEffect(() => {
-    if (isInitialLoad) {
+    if (!isOpen) {
+      hasAnimatedRef.current = false
+      setAnimating(false)
+      return
+    }
+
+    if (reducedMotion) {
+      setAnimating(false)
+      return
+    }
+
+    if (hasData && !hasAnimatedRef.current) {
+      hasAnimatedRef.current = true
+      setAnimating(true)
       const timer = setTimeout(() => {
-        setIsInitialLoad(false)
+        setAnimating(false)
       }, 650)
       return () => clearTimeout(timer)
     }
-  }, [isInitialLoad])
+  }, [isOpen, hasData, reducedMotion])
 
   if (reducedMotion) return false
-  return isInitialLoad
+  return animating
 }
